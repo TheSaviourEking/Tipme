@@ -241,6 +241,51 @@ test("connecting does not move the grant's lastSeenAt", async () => {
   assert.notEqual(await lastSeenOf(ownerId), before);
 });
 
+// Final review I1 (ruling L-R22): the reads a stream starts (its ready, a reconnect's resync, a
+// signal) carry the background header and are not activity either, so an open, visible but idle
+// tab still loses its grant after the idle hour. The person's own reads and actions still count.
+test("a reconnect's resync read (background) does not move lastSeenAt; an unmarked read does", async () => {
+  await database.pool.query(
+    `UPDATE ops_sessions SET last_seen_at = now() - interval '10 minutes'
+     WHERE user_id = $1 AND revoked_at IS NULL`,
+    [ownerId],
+  );
+  const before = await lastSeenOf(ownerId);
+  const stream = await opsEvents(owner.cookie);
+  await stream.waitFor(READY);
+  // What the client's ready resync runs: the menu's count and the page's own list.
+  for (const path of ['/v1/ops/approvals?status=pending', '/v1/ops/issues']) {
+    const response = await fetch(`${stack.api}${path}`, {
+      headers: {
+        cookie: owner.cookie,
+        origin: WEB,
+        'x-tipme-background': '1',
+      },
+    });
+    assert.equal(response.status, 200, path);
+  }
+  stream.close();
+  assert.equal(await lastSeenOf(ownerId), before);
+  // The browser sends it cross-origin, so the preflight must allow it.
+  const preflight = await fetch(`${stack.api}/v1/ops/issues`, {
+    method: 'OPTIONS',
+    headers: {
+      origin: WEB,
+      'access-control-request-method': 'GET',
+      'access-control-request-headers': 'x-tipme-background',
+    },
+  });
+  assert.match(
+    preflight.headers.get('access-control-allow-headers') ?? '',
+    /x-tipme-background/,
+  );
+  const unmarked = await fetch(`${stack.api}/v1/ops/issues`, {
+    headers: { cookie: owner.cookie, origin: WEB },
+  });
+  assert.equal(unmarked.status, 200);
+  assert.notEqual(await lastSeenOf(ownerId), before);
+});
+
 test("the stream closes at the grant's idle deadline", async (t) => {
   await database.pool.query(
     `UPDATE ops_sessions SET last_seen_at = now() - interval '60 minutes' + interval '3 seconds'

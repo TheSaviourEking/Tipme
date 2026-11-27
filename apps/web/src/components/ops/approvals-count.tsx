@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { OpsApproval } from '@tipme/contracts';
 import { useLiveEvents } from '@/components/live/live-provider';
 import { decidableCount } from '@/lib/approvals-count';
+import type { LiveRead } from '@/lib/live-refetch';
 import { opsFetch } from '@/lib/ops-staff-api';
 
 export { decidableCount };
@@ -23,18 +24,20 @@ export function useApprovalsCount(pathname: string): {
   const [count, setCount] = useState<number | null>(null);
   const lastRead = useRef(0);
   const latest = useRef(0);
-  const read = useCallback(async () => {
+  // `live`: the stream started this read (not the person), so it is not staff activity.
+  const read = useCallback(async (live?: LiveRead) => {
     lastRead.current = Date.now();
     const asked = ++latest.current;
     const result = await opsFetch<OpsApproval[]>(
       '/v1/ops/approvals?status=pending',
+      live,
     );
     // An older answer arriving late never replaces a newer one.
     if (asked === latest.current)
       setCount(decidableCount(result.ok ? result.data : null));
   }, []);
   const reload = useCallback(() => void read(), [read]);
-  useLiveEvents(APPROVALS_CHANGED, read);
+  useLiveEvents(APPROVALS_CHANGED, (live) => read(live));
   useEffect(() => {
     if (Date.now() - lastRead.current < AT_MOST_EVERY_MS) return;
     reload();

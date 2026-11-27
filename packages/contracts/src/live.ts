@@ -6,6 +6,13 @@ import { z } from 'zod';
  * re-reads its existing authorised endpoints. See docs/superpowers/specs/2026-11-03-live-updates-design.md.
  */
 
+/**
+ * Sent with `1` on a staff read that a live stream started (its ready, a resync, a signal), not the
+ * person. OpsGuard then reads the grant without moving its idle clock, so an open but unused admin
+ * tab still loses its grant after the idle hour (final review I1). GET only: a write always counts.
+ */
+export const LIVE_BACKGROUND_HEADER = 'x-tipme-background';
+
 /** Signals a recipient's stream may receive. */
 export const LIVE_RECIPIENT_TYPES = [
   'tips.changed',

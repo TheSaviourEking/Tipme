@@ -91,3 +91,20 @@ test('jitter stays under 5 s', () => {
     assert.ok(ms !== null && ms >= 8000 && ms < 13_000, String(ms));
   }
 });
+
+// Browsers fire a setTimeout longer than 2^31 - 1 ms at once, and each read then re-arms it: a
+// request loop. A far-off `until` (the rest setting has no upper bound) waits the most a timer can.
+test('a deadline more than ~24.8 days away is capped at the longest timer', () => {
+  const MAX_TIMER_MS = 2_147_483_647;
+  const far = [card(resting(at(30 * 24 * 60 * 60 * 1000)))];
+  assert.equal(
+    nextProviderDeadline(far, NOW, () => 0.5),
+    MAX_TIMER_MS,
+  );
+  // Just under the cap is left as it is.
+  const near = [card(resting(at(MAX_TIMER_MS - 10_000)))];
+  assert.equal(
+    nextProviderDeadline(near, NOW, () => 0),
+    MAX_TIMER_MS - 10_000,
+  );
+});

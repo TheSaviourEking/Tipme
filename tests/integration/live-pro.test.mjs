@@ -157,12 +157,16 @@ test('a purchase the read-back expires sends pro.changed', async (t) => {
     workerEnv: { RECONCILE_INTERVAL_MS: '300', RECONCILE_MIN_AGE_MS: '0' },
   });
   const redis = new Redis(REDIS_URL);
+  // after() hooks run in the order they are added, and an open stream holds the stack's stop: so
+  // this one closes the stream itself first (streamOf's own close comes later and is harmless).
+  let stream;
   t.after(async () => {
+    stream?.close();
     await redis.quit();
     await fast.stop();
   });
   const tobi = await owner('tobi');
-  const stream = await streamOf(t, fast.api, tobi.cookie);
+  stream = await streamOf(t, fast.api, tobi.cookie);
   const purchase = await buy(fast.api, tobi.cookie);
   // The checkout's time is up, then the pretend partner says it failed (no webhook): only the
   // worker's read-back can find out, and it expires the purchase.

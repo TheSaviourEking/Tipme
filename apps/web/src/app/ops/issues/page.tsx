@@ -12,6 +12,7 @@ import type { LiveEventType, OpsIssue } from '@tipme/contracts';
 import { Badge, Button, EmptyWell, Skeleton, Slip } from '@tipme/ui';
 import { age, ISSUE_KIND_LABELS, SEVERITY_LABELS } from '@/lib/ops-client';
 import { opsFetch } from '@/lib/ops-staff-api';
+import type { LiveRead } from '@/lib/live-refetch';
 import {
   INITIAL_ISSUES_LIST,
   createFirstPageReads,
@@ -63,9 +64,13 @@ export default function IssuesPage() {
    * pending replace (filters, "New changes: show") is never downgraded by a later signal read.
    */
   const firstPage = useCallback(
-    async (mode: FirstPageMode) => {
+    // `live`: the stream started this read (not the person), so it is not staff activity.
+    async (mode: FirstPageMode, live?: LiveRead) => {
       const ticket = reads.start(mode);
-      const result = await opsFetch<OpsIssue[]>(query(filtersNow.current));
+      const result = await opsFetch<OpsIssue[]>(
+        query(filtersNow.current),
+        live,
+      );
       const apply = reads.land(ticket, result.ok);
       if (!apply) return;
       setNow(Date.now());
@@ -77,9 +82,11 @@ export default function IssuesPage() {
 
   // A signal means something changed; with more pages showing it offers the change instead of
   // replacing rows under the reader (the base design's Tips-page rule).
-  useLiveEvents(ISSUES_CHANGED, () => firstPage('signal'), { resync: false });
+  useLiveEvents(ISSUES_CHANGED, (live) => firstPage('signal', live), {
+    resync: false,
+  });
   // A resync (the ready, the fallback poll, the tab coming back) only says "check".
-  useLiveEvents(NO_SIGNALS, () => firstPage('check'));
+  useLiveEvents(NO_SIGNALS, (live) => firstPage('check', live));
 
   useEffect(() => {
     void firstPage('replace');

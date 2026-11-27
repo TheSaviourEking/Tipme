@@ -25,6 +25,7 @@ test('the balance read-back runs for every adapter, card checkout or not', async
           name === 'mock_alt'
             ? [{ profileId: 'p', handleLower: 'ada', planChanged: true }]
             : [],
+        settled: [],
       };
     },
   );

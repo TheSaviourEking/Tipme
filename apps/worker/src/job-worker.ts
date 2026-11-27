@@ -379,7 +379,8 @@ export async function readBackProCollections<A>(
     checked: number;
     failed: number;
     paid: ProCollectionPaid[];
-    settled?: ProPurchaseSettled[];
+    // Required: an adapter that stopped returning it would stop pro.changed with no type error.
+    settled: ProPurchaseSettled[];
   }>,
 ): Promise<{
   checked: number;
@@ -398,7 +399,7 @@ export async function readBackProCollections<A>(
     totals.checked += result.checked;
     totals.failed += result.failed;
     totals.paid.push(...result.paid);
-    totals.settled.push(...(result.settled ?? []));
+    totals.settled.push(...result.settled);
   }
   return totals;
 }

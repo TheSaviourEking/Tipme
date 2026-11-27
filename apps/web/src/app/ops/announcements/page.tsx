@@ -38,13 +38,16 @@ import { opsAct, opsFetch } from '@/lib/ops-staff-api';
 import type { SessionResult } from '@/lib/session-client';
 import { LoadFailed } from '@/components/dashboard/load-failed';
 import { useLiveEvents, useLiveStatus } from '@/components/live/live-provider';
+import type { LiveRead } from '@/lib/live-refetch';
 import { ownTimerRuns } from '@/lib/own-timer';
 
 const ANNOUNCEMENTS_CHANGED: readonly LiveEventType[] = [
   'ops.announcements.changed',
 ];
 
-const fetchList = () => opsFetch<OpsAnnouncementList>('/v1/ops/announcements');
+// `live`: the stream started this read (not the person), so it is not staff activity.
+const fetchList = (live?: LiveRead) =>
+  opsFetch<OpsAnnouncementList>('/v1/ops/announcements', live);
 
 /*
  * Staff announcements by email (owner-approved, 14 Nov 2026). Staff write the words, preview the real
@@ -195,7 +198,10 @@ export default function AnnouncementsPage() {
         : current,
     );
   }, []);
-  const load = useCallback(() => fetchList().then(apply), [apply]);
+  const load = useCallback(
+    (live?: LiveRead) => fetchList(live).then(apply),
+    [apply],
+  );
 
   useEffect(() => {
     void fetchList().then(apply);
@@ -208,7 +214,7 @@ export default function AnnouncementsPage() {
     list?.filter((row) => row.state === 'sending').at(-1) ?? null;
   const sending = sendingRow !== null;
   const paused = sending && daily?.remaining === 0;
-  useLiveEvents(ANNOUNCEMENTS_CHANGED, load);
+  useLiveEvents(ANNOUNCEMENTS_CHANGED, (live) => load(live));
   const status = useLiveStatus();
   const ownTimer = ownTimerRuns(status);
   useEffect(() => {

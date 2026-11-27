@@ -25,7 +25,7 @@ import {
 import { loadBusinessRoles } from '@/lib/business/roles-api';
 import { isTemporaryFailure, keepsEnrolLink } from '@/lib/ops-enrol-link';
 import { opsLiveEnabled } from '@/lib/live-enabled';
-import { afterStreamEnd } from '@/lib/ops-stream-end';
+import { createStreamEndRecheck } from '@/lib/ops-stream-end';
 import { apiFetch } from '@/lib/session-client';
 
 /** Where this visitor stands: signed out, not staff, the authenticator step, or in. */
@@ -146,18 +146,29 @@ export function OpsShell({ children }: { children: React.ReactNode }) {
   // The staff stream ended (401/404): ask where this person stands. A passing failure of that
   // question keeps the admin area (and the page's filters and pages) showing and asks again with
   // backoff, so a later real answer (signed out, not staff) still takes effect.
-  const recheck = useRef<number | undefined>(undefined);
-  useEffect(() => () => window.clearTimeout(recheck.current), []);
-  const streamEnded = (attempt = 0) =>
-    void opsState().then((next) => {
-      const what = afterStreamEnd(next, attempt);
-      if ('apply' in what) apply(next);
-      else if ('recheckInMs' in what)
-        recheck.current = window.setTimeout(
-          () => streamEnded(attempt + 1),
-          what.recheckInMs,
-        );
+  // Stopped when the shell unmounts: a question still in flight then neither re-arms nor
+  // applies, and an answer applies with the latest `apply` (today's path, not the one it began on).
+  const applyRef = useRef(apply);
+  useEffect(() => {
+    applyRef.current = apply;
+  });
+  const recheck = useRef<ReturnType<typeof createStreamEndRecheck> | null>(
+    null,
+  );
+  useEffect(() => {
+    const created = createStreamEndRecheck({
+      ask: opsState,
+      apply: (next) => applyRef.current(next),
+      setTimeout: (fn, ms) => window.setTimeout(fn, ms),
+      clearTimeout: (timer) => window.clearTimeout(timer as number),
     });
+    recheck.current = created;
+    return () => {
+      created.stop();
+      if (recheck.current === created) recheck.current = null;
+    };
+  }, []);
+  const streamEnded = () => recheck.current?.start();
 
   const signOut = async () => {
     await apiFetch('/v1/ops/sign-out', { method: 'POST', body: {} });

@@ -6,6 +6,7 @@ import {
   type ExecutionContext,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
+import { LIVE_BACKGROUND_HEADER } from '@tipme/contracts';
 import {
   isActiveStaff,
   resolveOpsGrant,
@@ -49,6 +50,22 @@ export function routeAllows(
   return typeof permission === 'string'
     ? held.has(permission)
     : permission.some((one) => held.has(one));
+}
+
+/**
+ * Whether this request moves the grant's idle clock (`lastSeenAt`). Not the live stream's route,
+ * and not a GET a stream started (`LIVE_BACKGROUND_HEADER: 1`): an open tab is not use. Any write,
+ * marked or not, is the person acting and always counts.
+ */
+export function touchesIdleClock(request: {
+  noTouchRoute: boolean;
+  method: string;
+  headers: Record<string, string | string[] | undefined>;
+}): boolean {
+  if (request.noTouchRoute) return false;
+  const background =
+    request.method === 'GET' && request.headers[LIVE_BACKGROUND_HEADER] === '1';
+  return !background;
 }
 
 // Anyone who is not signed-in staff learns nothing about the admin area: every refusal is a 404.
@@ -103,7 +120,11 @@ export class OpsGuard implements CanActivate {
         ? await resolveOpsGrant(this.database.db, {
             token,
             sessionId: session.sessionId,
-            touch: !noTouch,
+            touch: touchesIdleClock({
+              noTouchRoute: Boolean(noTouch),
+              method: request.method,
+              headers: request.headers,
+            }),
           })
         : null;
     if (!session || !grant || grant.userId !== session.userId) throw hidden();

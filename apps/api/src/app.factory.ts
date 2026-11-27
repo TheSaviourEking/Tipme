@@ -1,4 +1,5 @@
 import type { Server } from 'node:http';
+import { LIVE_BACKGROUND_HEADER } from '@tipme/contracts';
 import type { INestApplication } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
@@ -92,11 +93,23 @@ export async function createApp(
       methods: credentialed
         ? ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']
         : ['GET', 'POST', 'OPTIONS'],
+      // LIVE_BACKGROUND_HEADER: a staff read a live stream started (OpsGuard: not activity).
       allowedHeaders: preview
         ? // Preview: every call is credentialed, so allow both kinds' headers.
-          ['content-type', 'x-tipme-csrf', 'idempotency-key', 'authorization']
+          [
+            'content-type',
+            'x-tipme-csrf',
+            'idempotency-key',
+            'authorization',
+            LIVE_BACKGROUND_HEADER,
+          ]
         : credentialed
-          ? ['content-type', 'x-tipme-csrf', 'idempotency-key']
+          ? [
+              'content-type',
+              'x-tipme-csrf',
+              'idempotency-key',
+              LIVE_BACKGROUND_HEADER,
+            ]
           : ['content-type', 'authorization', 'idempotency-key'],
       // The art route says when it drew a marked preview.
       exposedHeaders: ['x-qr-preview'],

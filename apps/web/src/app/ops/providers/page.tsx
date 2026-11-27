@@ -35,6 +35,7 @@ import { lagosTime, liveNowNote, trialNote } from '@/lib/ops-failover';
 import { useLiveEvents, useLiveStatus } from '@/components/live/live-provider';
 import { ownTimerRuns } from '@/lib/own-timer';
 import { nextProviderDeadline } from '@/lib/provider-deadline';
+import { BACKGROUND_READ, type LiveRead } from '@/lib/live-refetch';
 
 const PROVIDERS_CHANGED: readonly LiveEventType[] = ['ops.providers.changed'];
 
@@ -636,9 +637,13 @@ export default function ProvidersPage() {
     };
   }, []);
   // A promise, so the live scheduler runs one read at a time (useLiveEvents).
-  const refresh = useCallback(async () => {
+  // `live`: the stream (or its rest deadline) started this read, not the person: not activity.
+  const refresh = useCallback(async (live?: LiveRead) => {
     const read = ++reads.current;
-    const result = await opsFetch<OpsMailProviders>('/v1/ops/providers/mail');
+    const result = await opsFetch<OpsMailProviders>(
+      '/v1/ops/providers/mail',
+      live,
+    );
     if (gone.current || read !== reads.current) return;
     if (result.ok) {
       setData(result.data);
@@ -653,7 +658,7 @@ export default function ProvidersPage() {
   // A test moves on its own (sent, retried, failed), and so does a resting provider (trial,
   // recovered). Connected, the worker and the API signal each of those and the stream reads the
   // page again; only a rest running out has no write behind it, so one timeout waits for it.
-  useLiveEvents(PROVIDERS_CHANGED, refresh);
+  useLiveEvents(PROVIDERS_CHANGED, (live) => refresh(live));
   const ownTimer = ownTimerRuns(useLiveStatus());
   const waiting = data?.providers.some(
     (p) =>
@@ -672,9 +677,9 @@ export default function ProvidersPage() {
     if (ownTimer || !data) return;
     const ms = nextProviderDeadline(data.providers, Date.now(), Math.random);
     if (ms === null) return;
-    const timer = setTimeout(reload, ms);
+    const timer = setTimeout(() => void refresh(BACKGROUND_READ), ms);
     return () => clearTimeout(timer);
-  }, [data, ownTimer, reload]);
+  }, [data, ownTimer, refresh]);
   const canManage = can(access, 'providers.manage');
   return (
     <div className="ops-page-body">

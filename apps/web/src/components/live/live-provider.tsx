@@ -23,6 +23,7 @@ import {
 import {
   createRefetchScheduler,
   withdrawalsSignalDelay,
+  type LiveRead,
   type RefetchScheduler,
 } from '@/lib/live-refetch';
 import { firstReadPhase, type FirstReadPhase } from '@/lib/first-read';
@@ -210,11 +211,12 @@ export function LiveProvider({
 
 /**
  * Re-runs `refetch` on any of `types`, and on every resync and fallback poll. A no-op outside a
- * LiveProvider. `refetch` may change every render; the registration follows the latest one.
+ * LiveProvider. `refetch` may change every render; the registration follows the latest one. A
+ * staff screen passes `read` (the background marker) to its reads: they are not staff activity.
  */
 export function useLiveEvents(
   types: readonly LiveEventType[],
-  refetch: () => Promise<void>,
+  refetch: (read: LiveRead) => Promise<void>,
   options?: { resync?: boolean },
 ): void {
   const resync = options?.resync ?? true;
@@ -228,7 +230,7 @@ export function useLiveEvents(
     if (!scheduler) return;
     return scheduler.register(
       key ? (key.split(',') as LiveEventType[]) : [],
-      () => latest.current(),
+      (read) => latest.current(read),
       { resync },
     );
   }, [scheduler, key, resync]);
