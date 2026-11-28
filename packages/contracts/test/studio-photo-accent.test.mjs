@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import fc from 'fast-check';
 import {
@@ -289,6 +290,22 @@ test('the same colours always give the same result', () => {
     ),
     { numRuns: runs(300), seed: seed() },
   );
+});
+
+// 200 seeded candidate lists and what pickPhotoAccent gave for each before Creator and
+// Professional joined the registry (addendum §5.2, the envelope rule): new styles' surfaces must
+// leave every stored photo accent exactly as it was.
+const PINNED = JSON.parse(
+  readFileSync(
+    new URL('./fixtures/photo-accent-before-creator.json', import.meta.url),
+    'utf8',
+  ),
+);
+
+test('adding Creator and Professional changes no photo accent', () => {
+  assert.equal(PINNED.length, 200);
+  for (const [input, output] of PINNED)
+    assert.deepEqual(pickPhotoAccent(input), output, input.join(' '));
 });
 
 test('for any input colours it returns a passing pair or the fallback', () => {
