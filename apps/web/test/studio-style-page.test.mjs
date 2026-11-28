@@ -13,7 +13,9 @@ import {
   STUDIO_ACCENT_IDS,
   STUDIO_TILES_RING_MIX,
   blend,
+  checkDesign,
   contrastRatio,
+  hexToOklch,
   oklchToHex,
   pickPhotoAccent,
   resolveCover,
@@ -2709,4 +2711,407 @@ test("no other style's markup changes", () => {
   assert.deepEqual(Object.keys(PINNED_MARKUP), NINE);
   for (const style of NINE)
     assert.equal(labMarkup(style), PINNED_MARKUP[style], style);
+});
+
+// Creator renders exactly as before Professional: its lab example and its cover and link cases,
+// pinned on f55c0c63 before Professional's renderer landed.
+const PINNED_CREATOR = JSON.parse(
+  readFileSync(
+    new URL(
+      './fixtures/studio-markup-before-professional.json',
+      import.meta.url,
+    ),
+    'utf8',
+  ),
+).creator;
+
+test("Creator's markup is unchanged by Professional", () => {
+  const now = {
+    lab: labMarkup('creator'),
+    mixed: creator(),
+    nophoto: creator({ profile: { avatarPath: undefined, bio: undefined } }),
+    gradient: creator({ cover: 'gradient' }),
+    plain: creator({ cover: 'plain' }),
+    light: renderToStaticMarkup(
+      createElement(StudioStylePage, {
+        studio: {
+          document: { ...LAB.LAB_STYLE_EXAMPLES.creator, mode: 'light' },
+          images: {},
+          palette: studioTokens('creator', 'amber'),
+          checkVersion: DESIGN_CHECK_VERSION,
+        },
+        profile: {
+          handle: 'studiolab',
+          displayName: 'Kemi Adeyinka',
+          links: MIXED,
+          plan: 'pro',
+          cover: LAB_COVER,
+        },
+        tipBlock: createElement('form', { id: 'the-tip' }, 'TIP'),
+        footer: createElement('footer', { id: 'the-foot' }, 'FOOT'),
+        coverArt: createElement('div', { id: 'the-art' }),
+      }),
+    ),
+  };
+  assert.deepEqual(Object.keys(PINNED_CREATOR), Object.keys(now));
+  for (const [name, html] of Object.entries(now))
+    assert.equal(html, PINNED_CREATOR[name], name);
+});
+
+// Professional (addendum 2026-11-27-studio-creator-professional §6.5, §6.6, §7.2; Creator plan
+// Task 4): a card rising over the cover holds the identity, the icon row, the link rows, the chips
+// and the "Send a tip" pill, and "Powered by tipme" at its foot; the blocks follow the card.
+const professional = ({
+  cover = 'yours',
+  mode = 'light',
+  accent = null,
+  profile = {},
+  blocks,
+} = {}) =>
+  renderToStaticMarkup(
+    createElement(StudioStylePage, {
+      studio: {
+        document: doc({
+          style: 'professional',
+          mode,
+          accent,
+          cover,
+          ...(blocks ? { blocks } : {}),
+        }),
+        images: {
+          [IMG]: {
+            path: `/dev/studio-lab/image/${IMG}`,
+            width: 2400,
+            height: 1600,
+          },
+        },
+        palette: studioTokens('professional', accent),
+        checkVersion: DESIGN_CHECK_VERSION,
+      },
+      profile: {
+        handle: 'studiolab',
+        displayName: 'Ada Nwosu',
+        role: 'Product manager',
+        bio: 'Building solutions for a better tomorrow.',
+        links: MIXED,
+        plan: 'pro',
+        cover: LAB_COVER,
+        ...profile,
+      },
+      tipBlock: createElement('form', { id: 'the-tip' }, 'TIP'),
+      footer: createElement('footer', { id: 'the-foot' }, 'FOOT'),
+      coverArt: createElement('div', { id: 'the-art' }),
+    }),
+  );
+/** The rising card: the first `studio-card` (a text block's card also carries `studio-text`). */
+const cardOf = (html) => inside(html, /<div class="studio-card"(?=[ >])/);
+
+test("Professional's card holds identity, icon row, rows, chips, Tip and Powered by, in that order, and the blocks follow the card", () => {
+  const html = professional();
+  const card = cardOf(html);
+  const at = (where, marker) => {
+    const i = where.indexOf(marker);
+    assert.ok(i >= 0, `${marker} is in place`);
+    return i;
+  };
+  const inCard = [
+    at(card, 'class="studio-identity'),
+    at(card, 'class="studio-icons"'),
+    at(card, 'class="studio-rows"'),
+    at(card, 'id="the-tip"'),
+    at(card, 'class="studio-powered"'),
+  ];
+  assert.deepEqual(
+    [...inCard].sort((a, b) => a - b),
+    inCard,
+  );
+  // The card follows the cover; the blocks, then the footer, follow the card, never inside it.
+  const cardAt = html.indexOf(card);
+  assert.ok(at(html, 'class="studio-cover') < cardAt);
+  assert.doesNotMatch(card, /class="studio-blocks|id="the-foot"/);
+  const after = html.slice(cardAt + card.length);
+  assert.ok(at(after, 'class="studio-blocks') < at(after, 'id="the-foot"'));
+  // "Powered by tipme" at the card's foot: the last thing in it.
+  assert.match(card, /<\/a><\/div><\/div>$/);
+  assert.ok(
+    card.lastIndexOf('class="studio-powered"') >
+      card.lastIndexOf('id="the-tip"'),
+  );
+  // Links split as Creator's: follow sites as icons, the rest as rows, the featured link first.
+  assert.deepEqual(hrefs(inside(card, /<ul class="studio-icons"/)), [
+    'https://www.tiktok.com/@kemisings',
+    'https://x.com/kemisings',
+    'https://www.linkedin.com/in/kemisings',
+  ]);
+  assert.deepEqual(hrefs(inside(card, /<nav class="studio-rows"/)), [
+    'https://www.instagram.com/kemisings',
+    'https://www.youtube.com/@kemisings',
+    'https://www.twitch.tv/kemisings',
+    'https://kemisings.com',
+    'https://open.spotify.com/artist/kemi',
+  ]);
+  for (const link of MIXED)
+    assert.equal(html.split(`href="${link.url}"`).length - 1, 1, link.url);
+  assert.match(
+    inside(card, /<nav class="studio-rows"/),
+    /^<nav class="studio-rows" aria-label="Find me elsewhere">/,
+  );
+  assert.doesNotMatch(html, /class="studio-links"/);
+  assert.equal(html.match(/<h1/g)?.length, 1);
+  assert.match(html, /data-sheet="professional"/);
+  // One "Powered by", named "Powered by TipMe", home, no query string.
+  const powered = [...html.matchAll(/<a [^>]*class="studio-powered"[^>]*>/g)];
+  assert.equal(powered.length, 1);
+  assert.match(powered[0][0], / href="\/"/);
+  assert.match(powered[0][0], / aria-label="Powered by TipMe"/);
+});
+
+test("Professional's card has no shadow", () => {
+  const css = sheet('professional').replace(/\/\*[\s\S]*?\*\//g, '');
+  const rules = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)];
+  const card = rules.filter(
+    ([, sel]) =>
+      sel.includes(".studio[data-style='professional']") &&
+      /\.studio-card\b/.test(sel),
+  );
+  assert.ok(card.length > 0, 'the card has rules');
+  for (const [, sel, body] of card)
+    for (const m of body.matchAll(/box-shadow:\s*([^;]+);/g))
+      assert.equal(m[1].trim(), 'none', sel.trim());
+  // §8 allows three shadows and Professional draws none: no drop shadow anywhere in its sheet
+  // (an inset ring is a border, not a shadow), and no glass.
+  assert.doesNotMatch(css, /box-shadow: (?!none;|inset )/);
+  assert.doesNotMatch(css, /backdrop-filter: (?!none;)/);
+});
+
+test("Professional's cover box: 564 on a phone, 516 from 1024 px", () => {
+  assert.deepEqual(STYLE_COVER.professional, { tall: 564, desktopTall: 516 });
+  const css = sheet('professional');
+  assert.equal(
+    px(declarations(css, ".studio[data-style='professional']"), '--tall') +
+      NAV_HEIGHT,
+    STYLE_COVER.professional.tall,
+  );
+  assert.equal(
+    px(
+      declarations(
+        css,
+        ".studio[data-style='professional']",
+        'min-width: 1024px',
+      ),
+      '--tall',
+    ) + NAV_HEIGHT,
+    STYLE_COVER.professional.desktopTall,
+  );
+  // The card rises 112 over a photo on a phone, 160 on a desktop (§7.2).
+  assert.equal(
+    px(declarations(css, ".studio[data-style='professional']"), '--rise'),
+    112,
+  );
+  assert.equal(
+    px(
+      declarations(
+        css,
+        ".studio[data-style='professional']",
+        'min-width: 1024px',
+      ),
+      '--rise',
+    ),
+    160,
+  );
+  // The photo is offered for that box.
+  const tag =
+    /<img class="studio-cover__photo"[^>]*>/.exec(professional())?.[0] ?? '';
+  const phone = Math.ceil((564 * 16) / 9);
+  const desk = Math.ceil((516 * 16) / 9);
+  assert.match(tag, /fetchpriority="high"/i);
+  assert.match(
+    tag,
+    new RegExp(
+      `sizes="\\(min-width: ${desk}px\\) 100vw, \\(min-width: 1024px\\) ${desk}px, \\(min-width: ${phone}px\\) 100vw, ${phone}px"`,
+    ),
+  );
+  // No words on the photo: the cover holds the photo alone.
+  assert.doesNotMatch(
+    inside(professional(), /<div class="studio-cover"/),
+    /studio-(name|meta|bio|scrim)|<h1|<p/,
+  );
+});
+
+test('Professional lays the header over a photo cover only', () => {
+  assert.equal(studioHeader('professional', 'photo'), 'over');
+  for (const kind of ['art', 'gradient', 'plain'])
+    assert.equal(studioHeader('professional', kind), undefined, kind);
+  assert.equal(headerOf(professional()), 'over');
+  assert.equal(headerOf(professional({ cover: 'gradient' })), undefined);
+  assert.equal(headerOf(professional({ cover: 'plain' })), undefined);
+});
+
+test('a non-photo Your cover renders as cover art in a 240 px band', () => {
+  const covers = {
+    design: { kind: 'design', design: 'danfo' },
+    automatic: resolveCover({
+      handle: 'coverauto',
+      coverPath: null,
+      coverDesign: null,
+      coverColour: null,
+    }),
+    animated: { kind: 'animated', animation: 'drift', play: 'loop' },
+  };
+  for (const [name, cover] of Object.entries(covers)) {
+    const html = professional({ profile: { cover } });
+    assert.match(
+      inside(html, /<div class="studio-cover"/),
+      /^<div class="studio-cover" data-cover="art"><div id="the-art"><\/div><\/div>$/,
+      name,
+    );
+    assert.equal(headerOf(html), undefined, name);
+    // needsPhoto is false: the design check shows no cover-photo notice.
+    const notices = checkDesign(doc({ style: 'professional' }), {
+      images: {},
+      videos: {},
+      profile: { name: 'Ada Nwosu', bio: true, links: 2 },
+      plan: 'pro',
+      coverKind: name,
+      hasAvatar: true,
+    }).notices.map((n) => n.rule);
+    assert.ok(!notices.includes('cover-photo'), `${name}: ${notices}`);
+  }
+  // Creator, by contrast, asks for a photo.
+  assert.ok(
+    checkDesign(doc({ style: 'creator' }), {
+      images: {},
+      videos: {},
+      profile: { name: 'Ada Nwosu', bio: true, links: 2 },
+      plan: 'pro',
+      coverKind: 'design',
+      hasAvatar: true,
+    })
+      .notices.map((n) => n.rule)
+      .includes('cover-photo'),
+  );
+  const css = sheet('professional');
+  for (const kind of ['art', 'gradient'])
+    assert.equal(
+      px(
+        declarations(
+          css,
+          `.studio[data-style='professional'] .studio-cover[data-cover='${kind}']`,
+        ),
+        'height',
+      ),
+      240,
+      kind,
+    );
+});
+
+test("Professional's gradient is two low-chroma tints of the accent: L .95 to .90 light, .28 to .22 dark", () => {
+  const css = sheet('professional');
+  assert.match(
+    declarations(
+      css,
+      ".studio[data-style='professional'] .studio-cover[data-cover='gradient']",
+    ),
+    /background: linear-gradient\(\s*180deg,\s*var\(--studio-coverFrom\),\s*var\(--studio-coverTo\)\s*\);/,
+  );
+  for (const [mode, from, to] of [
+    ['light', 0.95, 0.9],
+    ['dark', 0.28, 0.22],
+  ]) {
+    const root = rootTag(
+      professional({ cover: 'gradient', mode, accent: 'green' }),
+    );
+    const value = (k) =>
+      new RegExp(`--studio-${k}:(#[0-9a-f]{6})`).exec(root)?.[1];
+    assert.ok(value('coverFrom') && value('coverTo'), mode);
+    assert.ok(Math.abs(hexToOklch(value('coverFrom')).l - from) < 0.01, mode);
+    assert.ok(Math.abs(hexToOklch(value('coverTo')).l - to) < 0.01, mode);
+    assert.ok(hexToOklch(value('coverFrom')).c <= 0.036, mode);
+  }
+});
+
+test('Professional draws no verified mark', () => {
+  for (const plan of ['pro', 'free']) {
+    const html = professional({ profile: { plan } });
+    assert.match(
+      html,
+      /<h1 id="studio-name" class="studio-name">Ada Nwosu<\/h1><p class="studio-meta">/,
+    );
+    assert.doesNotMatch(html, /verified/i);
+  }
+});
+
+test('with no blocks the page ends at the card, then the footer', () => {
+  const html = professional({ blocks: [] });
+  const card = cardOf(html);
+  const after = html.slice(html.indexOf(card) + card.length);
+  assert.doesNotMatch(html, /class="studio-(blocks|grid)/);
+  assert.match(
+    after,
+    /^<div class="studio-foot"><footer id="the-foot">FOOT<\/footer><\/div><\/div><\/div>$/,
+  );
+});
+
+test("Professional's pill and the sticky bar's pill draw their 1 px edges in tipEdge and tipBarEdge", () => {
+  const css = sheet('professional');
+  const tip = declarations(
+    css,
+    ".studio[data-style='professional'] .studio-tip .composer-submit",
+  );
+  assert.match(tip, /border: 1px solid var\(--studio-tipEdge\);/);
+  assert.match(tip, /background: var\(--studio-acc\);/);
+  assert.match(tip, /color: var\(--studio-accLabel\);/);
+  assert.match(tip, /border-radius: 999px;/);
+  assert.equal(px(tip, 'min-height'), 56);
+  const bar = declarations(
+    css,
+    ".studio[data-style='professional'] .tip-bar__button",
+  );
+  assert.match(bar, /border: 1px solid var\(--studio-tipBarEdge\);/);
+  assert.match(bar, /background: var\(--studio-acc\);/);
+  assert.equal(px(bar, 'min-height'), 48);
+  // The bar is solid bg with a 1 px line on top (§6.5): the edge is proven on bg.
+  const strip = declarations(
+    css,
+    ".studio[data-style='professional'] .tip-bar",
+  );
+  assert.match(strip, /background: var\(--studio-bg\);/);
+  assert.match(strip, /border-top: 1px solid var\(--studio-line\);/);
+  assert.match(strip, /backdrop-filter: none;/);
+  // The tokens are on the page's root, from the registry: Amber light's edge is its own.
+  const t = studioTokens('professional', 'amber').light;
+  assert.notEqual(t.tipEdge, t.acc);
+  const root = rootTag(professional({ accent: 'amber' }));
+  assert.match(root, new RegExp(`--studio-tipEdge:${t.tipEdge}`));
+  assert.match(root, new RegExp(`--studio-tipBarEdge:${t.tipBarEdge}`));
+  // The phone's section title is the size the design check measures (ruling P3).
+  assert.equal(
+    px(
+      declarations(css, ".studio[data-style='professional'] .studio-title"),
+      'font-size',
+    ),
+    STUDIO_HEADING_PX.professional,
+  );
+});
+
+// A text or quote block is a `studio-card` too (`studio-card studio-text`): the rising card's rules
+// name it as the page's child (or the cover's next sibling), so none of them reaches a block.
+test("Professional's card rules never reach a block's card", () => {
+  const css = sheet('professional').replace(/\/\*[\s\S]*?\*\//g, '');
+  const selectors = [...css.matchAll(/([^{}]+)\{[^{}]*\}/g)]
+    .flatMap(([, sel]) => sel.split(','))
+    .map((s) => s.replace(/\s+/g, ' ').trim())
+    .filter((s) => /\.studio-card(?![\w-])/.test(s));
+  assert.ok(selectors.length > 3, 'the card has rules');
+  for (const s of selectors)
+    assert.match(
+      s,
+      /(\.studio-page > \.studio-card|\+ \.studio-card)(?![\w-])/,
+      s,
+    );
+  // The markup agrees: the rising card is the page's child; a block's card is not.
+  const html = professional();
+  const cover = inside(html, /<div class="studio-cover"/);
+  assert.ok(html.includes(`${cover}<div class="studio-card">`));
+  assert.match(html, /class="studio-card studio-text"/);
 });

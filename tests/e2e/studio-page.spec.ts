@@ -117,11 +117,17 @@ test.describe('a published Studio page', () => {
       if (style === 'classic')
         await expect(form).not.toHaveAttribute('data-skin');
       else await expect(form).toHaveAttribute('data-skin', style);
-      // Creator's in-page Tip reads "Support my work, tip ₦…" (addendum §6.5).
+      // Creator's in-page Tip is named by its words, "Support my work Give, tip or appreciate ₦…",
+      // and Professional's "Send a ₦… tip" (addendum §6.5, ruling S-R5).
       await expect(
         page
           .getByRole('button', {
-            name: style === 'creator' ? /^Support my work\b/ : /^Tip\b/,
+            name:
+              style === 'creator'
+                ? /^Support my work\b/
+                : style === 'professional'
+                  ? /^Send a\b/
+                  : /^Tip\b/,
           })
           .first(),
         handle,
@@ -324,15 +330,20 @@ test.describe('a published Studio page', () => {
         expect(await shown(page, `main ${insta}`), `${style} at ${width}`).toBe(
           1,
         );
-        // Creator draws a follow site in its icon row, with no titled section (addendum §5.4).
+        // Creator and Professional draw a follow site in the icon row, with no titled section
+        // (addendum §5.4).
         const area =
           style === 'classic'
             ? '.profile-links'
-            : style === 'creator'
+            : style === 'creator' || style === 'professional'
               ? '.studio-icons'
               : '.studio-links';
         await expect(page.locator(`${area} ${insta}`), style).toHaveCount(1);
-        if (style !== 'classic' && style !== 'creator')
+        if (
+          style !== 'classic' &&
+          style !== 'creator' &&
+          style !== 'professional'
+        )
           await expect(
             page
               .locator('.studio-links')

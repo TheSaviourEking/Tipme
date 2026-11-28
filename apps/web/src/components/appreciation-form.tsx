@@ -32,7 +32,7 @@ import type { PaymentMode } from '@/lib/payment-mode';
 import { TippingOpensSoon } from './tipping-opens-soon';
 import { Arrow } from './brand';
 import { TipAction } from './tip-action';
-import { skinTipLabel } from './tip-skin-label';
+import { PROFESSIONAL_WORDS, skinTipLabel } from './tip-skin-label';
 import { campaignFromPath } from '@/lib/campaign-link';
 import { Money } from '@/components/money';
 
@@ -225,7 +225,8 @@ export function AppreciationForm({
       : (presets.find((preset) => String(preset.minor) === selection)?.minor ??
         null);
 
-  // A skin's fixed Tip words (Creator's two lines), with the amount in its name (§6.5).
+  // A skin's fixed Tip words (Creator's two lines, Professional's "Send a … tip"), with the amount
+  // in its name (§6.5).
   const skinLabel = skin ? skinTipLabel(skin, amount) : null;
 
   const fetchQuote = async (minor: number) => {
@@ -1019,6 +1020,34 @@ export function AppreciationForm({
                   focusable="false"
                 >
                   <path d="M9.5 6.5L15 12l-5.5 5.5" />
+                </svg>
+              </>
+            ) : skin === 'professional' && skinLabel ? (
+              // Professional (addendum §6.5): "Send a ₦2,000 tip" ("Send a tip" with no valid
+              // amount), then a decorative heart. Named by the words it shows (ruling S-R5).
+              <>
+                <span className="tip-skin__words">
+                  {PROFESSIONAL_WORDS[0]}{' '}
+                  {amount ? (
+                    <>
+                      <Money
+                        minor={amount}
+                        code={!onProfile}
+                        className="tip-skin__amount"
+                      />{' '}
+                    </>
+                  ) : null}
+                  {PROFESSIONAL_WORDS[1]}
+                </span>
+                <svg
+                  className="tip-skin__heart"
+                  viewBox="0 0 24 24"
+                  width="18"
+                  height="18"
+                  aria-hidden="true"
+                  focusable="false"
+                >
+                  <path d="M12 20.5s-7.5-4.6-9.3-9.4C1.5 7.8 3.6 4.5 7 4.5c2 0 3.6 1.1 5 3 1.4-1.9 3-3 5-3 3.4 0 5.5 3.3 4.3 6.6-1.8 4.8-9.3 9.4-9.3 9.4z" />
                 </svg>
               </>
             ) : amount ? (

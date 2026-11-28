@@ -86,10 +86,10 @@ const topLevel = (list) => {
   return [...out, list.slice(start).trim()];
 };
 
-// Professional's sheet is a stub until its renderer lands (Creator plan ruling P1, Task 4, which
-// takes it off this list; Task 3 took Creator off). A stub holds no rule at all, so nothing
-// unscoped can hide behind it.
-const STUB_SHEETS = ['professional.css'];
+// A style's sheet may be a stub (no rule at all, so nothing unscoped can hide behind it) only while
+// its renderer is on its way (Creator plan ruling P1). Tasks 3 and 4 took Creator and Professional
+// off; none is left.
+const STUB_SHEETS = [];
 
 test('every style rule is scoped to a styled Studio page', () => {
   for (const file of styleFiles.filter((f) => f.endsWith('.css'))) {

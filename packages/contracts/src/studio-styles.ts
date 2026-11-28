@@ -684,15 +684,17 @@ const SECOND_LINE_OPACITY = 1;
  * own. So the button carries a 1 px edge (`deepEdge`): the fill itself wherever the fill reaches
  * 3:1 on `bg` (an edge in the button's own colour, so the look is unchanged), else the fill's hue
  * and chroma at the nearest lightness that does, away from the page (lighter in dark, darker in
- * light). Contrast with the page only grows that way, so a bisection finds it.
+ * light). Contrast with the page only grows that way, so a bisection finds it. `min` is the target:
+ * 3 by default, STUDIO_PILL_EDGE_MIN for a pill (its curved ends antialias, ruling S-R4).
  */
 export function studioTipEdge(
   fill: Hex,
   bg: Hex | readonly Hex[],
   mode: 'light' | 'dark',
+  min: number = 3,
 ): Hex {
   const grounds: readonly Hex[] = typeof bg === 'string' ? [bg] : bg;
-  const ok = (h: Hex) => grounds.every((g) => contrastRatio(h, g) >= 3);
+  const ok = (h: Hex) => grounds.every((g) => contrastRatio(h, g) >= min);
   if (ok(fill)) return fill;
   const { l, c, h } = hexToOklch(fill);
   const at = (x: number) => oklchToHex({ l: x, c, h });
@@ -707,6 +709,13 @@ export function studioTipEdge(
 }
 
 /**
+ * The target a pill-shaped Tip's 1 px edge is computed to (rulings S-R2, S-R4): 3:1 plus a margin
+ * for antialiasing on the pill's curved ends, where the boards measured 2.91 drawn on an edge
+ * computed at 3.01. Professional's "Send a tip" pill and its sticky pill (addendum §6.5).
+ */
+export const STUDIO_PILL_EDGE_MIN = 3.25;
+
+/**
  * The phone's sticky bar (§6.5): `bar` is the page's bg at 85% (`d9`) over whatever scrolls under
  * it. Its two ends, over pure white and over pure black, bound every bar a visitor can see, so a
  * pill edge that keeps 3:1 on both keeps it over anything (Creator plan Task 3, ruling S-R2).
@@ -719,7 +728,8 @@ export interface StudioContrastPair {
   name: string;
   fg: Hex;
   bg: Hex;
-  min: 3 | 4.5;
+  /** 4.5 text, 3 non-text UI (§4.2); 3.25 a pill's edge (STUDIO_PILL_EDGE_MIN). */
+  min: 3 | typeof STUDIO_PILL_EDGE_MIN | 4.5;
 }
 
 /**
@@ -752,8 +762,12 @@ export function studioContrastPairs(
     { name: 'focus ring (accText) on bg', fg: accText, bg: n.bg, min: 3 },
     { name: 'focus ring (accText) on card', fg: accText, bg: n.card, min: 3 },
   ];
-  const add = (name: string, fg: Hex, bg: Hex, min: 3 | 4.5) =>
-    pairs.push({ name, fg, bg, min });
+  const add = (
+    name: string,
+    fg: Hex,
+    bg: Hex,
+    min: StudioContrastPair['min'],
+  ) => pairs.push({ name, fg, bg, min });
   // A style that names a tertiary text colour sets text in it on all three surfaces.
   if (n.fg3)
     for (const bg of [n.bg, n.card, n.el2])
@@ -892,6 +906,20 @@ export function studioContrastPairs(
       add('icon badge (fg) on el2', n.fg, n.el2, 4.5);
       // A row's sub (fg2) on its el2 hover (§7.2).
       add('fg2 on el2', n.fg2, n.el2, 4.5);
+      // Rulings S-R2, S-R4: the "Send a tip" pill (acc) keeps 3.25 against the card at its edge,
+      // and the sticky bar's pill against the bar's solid bg (§6.5).
+      add(
+        'Tip pill edge (tipEdge) on card',
+        studioTipEdge(acc, n.card, mode, STUDIO_PILL_EDGE_MIN),
+        n.card,
+        STUDIO_PILL_EDGE_MIN,
+      );
+      add(
+        'sticky Tip pill edge (tipBarEdge) on bg',
+        studioTipEdge(acc, n.bg, mode, STUDIO_PILL_EDGE_MIN),
+        n.bg,
+        STUDIO_PILL_EDGE_MIN,
+      );
       break;
     }
   }
@@ -906,7 +934,8 @@ export type StudioTokenMap = Record<string, string>;
  * values as `acc`, `accLabel` and `accText`, `bar` (bg at 85%), and the derived tokens a style
  * names in §9 (`chipOn` for Journal and Linen, Stage's `glow`, Tiles' `tileFocus`), and Creator's
  * Tip (`deep`, `deepEnd` the sheen's lower end, `deepLabel`, `deepEdge` its 1 px edge, and
- * `deepBarEdge` the sticky bar pill's edge; addendum §6.1, ruling S-R2).
+ * `deepBarEdge` the sticky bar pill's edge; addendum §6.1, ruling S-R2), and Professional's pill
+ * edges (`tipEdge` on the card, `tipBarEdge` on the sticky bar's bg; rulings S-R2, S-R4).
  */
 export function studioTokens(
   style: StudioStyleId,
@@ -937,6 +966,10 @@ export function studioTokens(
       t.deepLabel = deep.label;
       t.deepEdge = studioTipEdge(deep.fill, n.bg, mode);
       t.deepBarEdge = studioTipEdge(deep.fill, barEnds(n.bg), mode);
+    }
+    if (style === 'professional') {
+      t.tipEdge = studioTipEdge(a.fill, n.card, mode, STUDIO_PILL_EDGE_MIN);
+      t.tipBarEdge = studioTipEdge(a.fill, n.bg, mode, STUDIO_PILL_EDGE_MIN);
     }
     return t;
   };

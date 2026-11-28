@@ -71,6 +71,8 @@ const HEADER_OVER: Partial<Record<StudioStyleId, readonly CoverKind[]>> = {
   clear: ['photo', 'art'],
   // Creator's gradient is pale in light mode, where white header words would fail (addendum §6.7).
   creator: ['photo'],
+  // Professional's gradient is a pale tint in light mode too, and its art is a band (addendum §6.7).
+  professional: ['photo'],
 };
 
 /**
@@ -132,6 +134,9 @@ export function StudioStylePage({
   // Stage and Horizon set the identity over a full-bleed cover photo (§9.4, §9.9).
   const overPhoto = OVER_PHOTO.includes(style);
   const creator = style === 'creator';
+  const professional = style === 'professional';
+  // The styles that split links into an icon row and rows (addendum §5.4).
+  const placedLinks = creator || professional;
   const tip = (
     <section
       className="studio-tip"
@@ -156,17 +161,17 @@ export function StudioStylePage({
       doc={doc}
       cover={profile.cover}
       coverArt={coverArt}
-      // Creator's tall crop is offered no rendition wider than the photo (as Stage's hero); the
-      // other styles' covers are drawn as before.
-      {...(creator && coverSize ? { coverSize } : {})}
+      // Creator's and Professional's tall crops are offered no rendition wider than the photo (as
+      // Stage's hero); the other styles' covers are drawn as before.
+      {...(placedLinks && coverSize ? { coverSize } : {})}
     />
   );
   const identity = (
     <StyleIdentity styleId={style} profile={profile} firstName={firstName} />
   );
   const links = <StyleLinks links={profile.links ?? []} />;
-  // Creator (addendum §5.4): follow sites as icons under the identity, the rest as rows after the
-  // Tip, the featured link the first row.
+  // Creator and Professional (addendum §5.4): follow sites as icons under the identity, the rest as
+  // rows (after the Tip on Creator, above it in Professional's card), the featured link the first.
   const placed = splitLinksByPlace(profile.links ?? []);
   const header = studioHeader(style, coverKind(doc, profile.cover));
   return (
@@ -232,6 +237,24 @@ export function StudioStylePage({
               {tip}
             </div>
           </>
+        ) : professional ? (
+          // Professional (addendum §7.2): the card rising over the cover holds the identity and icon
+          // row (a desktop's left column), the rows, the chips and the pill, and "Powered by tipme"
+          // at its foot (the right column, 400). The blocks follow the card.
+          <>
+            {cover}
+            <div className="studio-card">
+              <div className="studio-card__side">
+                {identity}
+                <StyleIconRow links={placed.icons} />
+              </div>
+              <div className="studio-card__main">
+                <StyleLinkRows links={placed.rows} />
+                {tip}
+                <PoweredBy />
+              </div>
+            </div>
+          </>
         ) : (
           <>
             {cover}
@@ -239,7 +262,14 @@ export function StudioStylePage({
             {tip}
           </>
         )}
-        {style === 'tiles' ? (
+        {professional ? (
+          // With no blocks the page ends at the card, then the footer (§7.2).
+          doc.blocks.length > 0 && (
+            <div className="studio-grid">
+              <StyleBlocks doc={doc} images={images} />
+            </div>
+          )
+        ) : style === 'tiles' ? (
           <div className="studio-grid">
             {cover}
             {tip}

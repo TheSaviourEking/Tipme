@@ -103,3 +103,28 @@ for (const [width, mode] of [
       fullPage: true,
     });
   });
+
+// Professional is light-first (addendum §7.2): its phone and desktop in light, its phone in dark.
+// The lab example has link rows and blocks, so the images show the rows inside the card above the
+// chips and the pill, "Powered by tipme" at the card's foot, and the blocks after the card.
+for (const [width, mode] of [
+  [390, 'light'],
+  [1440, 'light'],
+  [390, 'dark'],
+] as const)
+  test(`Professional at ${width} ${mode}`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto(`/dev/studio-lab?style=professional&mode=${mode}`);
+    await page.locator('.studio[data-style]').waitFor();
+    await page.evaluate(() => document.fonts.ready);
+    await page
+      .locator('form[data-skin][data-bar]')
+      .waitFor({ state: 'attached' });
+    await page.waitForFunction(() =>
+      [...document.images].every((i) => i.loading === 'lazy' || i.complete),
+    );
+    await expect(page).toHaveScreenshot(
+      `studio-professional-${width}-${mode}.png`,
+      { animations: 'disabled', caret: 'hide', fullPage: true },
+    );
+  });

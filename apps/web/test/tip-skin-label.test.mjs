@@ -27,6 +27,21 @@ test('Creator\'s Tip reads "Support my work" over "Give, tip or appreciate", nam
   });
 });
 
+// Professional's pill (§6.5): "Send a ₦2,000 tip", or "Send a tip" with no valid amount. One line;
+// its name is the words it shows (ruling S-R5), the heart after it decoration.
+test('Professional\'s Tip reads "Send a ₦2,000 tip", or "Send a tip"', () => {
+  assert.deepEqual(skinTipLabel('professional', '200000'), {
+    name: 'Send a ₦2,000 tip',
+  });
+  assert.deepEqual(skinTipLabel('professional', 250050), {
+    name: 'Send a ₦2,500.50 tip',
+  });
+  assert.deepEqual(skinTipLabel('professional', BigInt('999999999999')), {
+    name: 'Send a ₦9,999,999,999.99 tip',
+  });
+  assert.deepEqual(skinTipLabel('professional', null), { name: 'Send a tip' });
+});
+
 test('every other skin keeps "Tip ₦…"', () => {
   for (const skin of [
     'clear',

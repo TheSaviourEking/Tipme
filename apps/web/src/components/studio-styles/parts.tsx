@@ -70,6 +70,8 @@ export const STYLE_COVER: Partial<
   horizon: { tall: 640 + NAV_HEIGHT, desktopTall: 836 + NAV_HEIGHT },
   // Stage's box (addendum §9.3), so the #283 tall-crop read serves it too.
   creator: { tall: 488 + NAV_HEIGHT, desktopTall: 640 + NAV_HEIGHT },
+  // Professional (addendum §7.2): Stage's phone box, 440 from 1024 px, the card rising over its foot.
+  professional: { tall: 488 + NAV_HEIGHT, desktopTall: 440 + NAV_HEIGHT },
 };
 
 /**
@@ -310,12 +312,15 @@ export function StyleIdentity({
   // Journal shows this avatar on a desktop only (its phone avatar sits in the top row), so it is
   // not fetched eagerly there; it is never Journal's largest paint (the name is).
   const journal = style === 'journal';
-  // Creator's avatar is 112 on a phone, 144 on a desktop (addendum §7.1).
+  // Creator's avatar is 112 on a phone, 144 on a desktop (addendum §7.1); Professional's 96 and 120
+  // (§7.2).
   const sizes = journal
     ? '72px'
     : style === 'creator'
       ? '(max-width: 1023px) 112px, 144px'
-      : '(max-width: 1023px) 104px, 128px';
+      : style === 'professional'
+        ? '(max-width: 1023px) 96px, 120px'
+        : '(max-width: 1023px) 104px, 128px';
   return (
     <header className="studio-identity" aria-labelledby="studio-name">
       <AvatarImage

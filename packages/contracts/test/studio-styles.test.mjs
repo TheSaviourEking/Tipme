@@ -2,12 +2,14 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
   CLASSIC_PURPLE,
+  PHOTO_ACCENT_BAND,
   STUDIO_ACCENTS,
   STUDIO_ACCENT_IDS,
   STUDIO_FREE_STYLES,
   STUDIO_STYLES,
   STUDIO_STYLE_IDS,
   STUDIO_DEEP_SHEEN,
+  STUDIO_PILL_EDGE_MIN,
   STUDIO_TILES_RING_MIX,
   accentValues,
   blend,
@@ -15,6 +17,7 @@ import {
   hexToOklch,
   oklchToHex,
   studioContrastPairs,
+  studioTipEdge,
   studioTokens,
 } from '../dist/index.js';
 
@@ -941,4 +944,123 @@ test('Creator’s Tip edge holds 3:1 for every light fill the photo accent can m
 test('Creator and Professional prove fg2 on el2 (row hover, recessed surfaces)', () => {
   everyAccentAndMode('creator', ['fg2 on el2']);
   everyAccentAndMode('professional', ['fg2 on el2']);
+});
+
+// Rulings S-R2 and S-R4 (owner, 28 Nov: every design passes contrast and visibility): Professional's
+// "Send a tip" pill is the accent's fill on the card, where Amber light measures 1.78. It carries a
+// 1 px edge (`tipEdge`) computed as Creator's is (studioTipEdge), to 3.25 rather than 3: the margin
+// the boards measured for antialiasing on the pill's curved ends (2.91 drawn on a computed 3.01).
+test('the pill edge target is 3.25, and studioTipEdge reaches any target it is given', () => {
+  assert.equal(STUDIO_PILL_EDGE_MIN, 3.25);
+  const amber = STUDIO_ACCENTS.amber.light.fill;
+  const card = STUDIO_STYLES.professional.neutrals.light.card;
+  assert.ok(
+    contrastRatio(amber, card) < 2,
+    'Amber light alone fails on the card',
+  );
+  const at3 = studioTipEdge(amber, card, 'light');
+  const at325 = studioTipEdge(amber, card, 'light', STUDIO_PILL_EDGE_MIN);
+  assert.ok(contrastRatio(at3, card) >= 3);
+  assert.ok(contrastRatio(at325, card) >= 3.25);
+  // The nearest lightness that does: a little darker than the 3:1 edge, and no darker than needed.
+  assert.ok(hexToOklch(at325).l < hexToOklch(at3).l);
+  assert.ok(contrastRatio(at325, card) < 3.4);
+  // Its hue is the fill's.
+  assert.ok(Math.abs(hexToOklch(at325).h - hexToOklch(amber).h) < 3);
+  // The default target is still 3 (Creator's edges are unchanged).
+  assert.equal(studioTipEdge(amber, card, 'light', 3), at3);
+});
+
+test("Professional's pill keeps 3.25:1 against the card at its edge, every accent and mode", () => {
+  let lowest = Infinity;
+  const changed = [];
+  for (const accent of [...CURATED, null])
+    for (const mode of MODES) {
+      const t = studioTokens('professional', accent)[mode];
+      assert.match(t.tipEdge, /^#[0-9a-f]{6}$/, `${accent} ${mode}`);
+      const edge = contrastRatio(t.tipEdge, t.card);
+      assert.ok(edge >= 3.25, `${accent} ${mode}: edge ${edge.toFixed(2)}`);
+      lowest = Math.min(lowest, edge);
+      // The look is kept: where the fill already reaches 3.25 on the card the edge is the fill.
+      if (contrastRatio(t.acc, t.card) >= 3.25)
+        assert.equal(t.tipEdge, t.acc, `${accent} ${mode}`);
+      else changed.push(`${accent ?? 'default'} ${mode}`);
+      const pair = studioContrastPairs(
+        'professional',
+        accentValues('professional', accent, mode),
+        mode,
+      ).find((p) => p.name === 'Tip pill edge (tipEdge) on card');
+      assert.deepEqual(pair, {
+        name: 'Tip pill edge (tipEdge) on card',
+        fg: t.tipEdge,
+        bg: t.card,
+        min: 3.25,
+      });
+    }
+  assert.ok(lowest >= 3.25);
+  // Only Amber light needs an edge of its own (1.78 on the card).
+  assert.deepEqual(changed, ['amber light']);
+});
+
+// §6.5: Professional's phone bar is solid bg (no 85% glass), its pill the accent, 48 tall. The pill's
+// edge (`tipBarEdge`) keeps 3.25 against that bg.
+test("Professional's sticky pill keeps 3.25:1 against its solid bar, every accent and mode", () => {
+  for (const accent of [...CURATED, null])
+    for (const mode of MODES) {
+      const t = studioTokens('professional', accent)[mode];
+      assert.match(t.tipBarEdge, /^#[0-9a-f]{6}$/, `${accent} ${mode}`);
+      const edge = contrastRatio(t.tipBarEdge, t.bg);
+      assert.ok(edge >= 3.25, `${accent} ${mode}: ${edge.toFixed(2)}`);
+      if (contrastRatio(t.acc, t.bg) >= 3.25)
+        assert.equal(t.tipBarEdge, t.acc, `${accent} ${mode}`);
+      assert.deepEqual(
+        studioContrastPairs(
+          'professional',
+          accentValues('professional', accent, mode),
+          mode,
+        ).find((p) => p.name === 'sticky Tip pill edge (tipBarEdge) on bg'),
+        {
+          name: 'sticky Tip pill edge (tipBarEdge) on bg',
+          fg: t.tipBarEdge,
+          bg: t.bg,
+          min: 3.25,
+        },
+      );
+    }
+});
+
+test("Professional's pill edges hold 3.25:1 for every fill the photo accent can make, in both modes", () => {
+  // §6 step 3: fills are clamped to PHOTO_ACCENT_BAND's lightness (light .45–.55, dark .75–.82),
+  // chroma .04–.16; light labels are white, dark labels near-black.
+  const n = STUDIO_STYLES.professional.neutrals;
+  const band = (mode) => {
+    const [lo, hi] = PHOTO_ACCENT_BAND[mode];
+    return [lo, (lo + hi) / 2, hi];
+  };
+  for (const [mode, label] of [
+    ['light', '#ffffff'],
+    ['dark', '#0e1116'],
+  ])
+    for (const l of band(mode))
+      for (const c of [PHOTO_ACCENT_BAND.grey, 0.1, PHOTO_ACCENT_BAND.chroma])
+        for (let h = 0; h < 360; h += 10) {
+          const fill = oklchToHex({ l, c, h });
+          const pairs = studioContrastPairs(
+            'professional',
+            { fill, label, text: fill },
+            mode,
+          );
+          for (const [name, bg] of [
+            ['Tip pill edge (tipEdge) on card', n[mode].card],
+            ['sticky Tip pill edge (tipBarEdge) on bg', n[mode].bg],
+          ]) {
+            const pair = pairs.find((p) => p.name === name);
+            assert.ok(pair, `${fill} ${mode} ${name}`);
+            assert.equal(pair.bg, bg);
+            assert.ok(
+              contrastRatio(pair.fg, pair.bg) >= 3.25,
+              `${fill} ${mode} ${name}: ${contrastRatio(pair.fg, pair.bg).toFixed(2)}`,
+            );
+          }
+        }
 });

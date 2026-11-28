@@ -59,7 +59,7 @@ export const STUDIO_HANDLES = [
 ] as const;
 export type StudioHandle = (typeof STUDIO_HANDLES)[number];
 
-/** The nine styles (styles spec §9), in the canvas's order, then Creator (addendum §7.1). */
+/** The nine styles (styles spec §9), in the canvas's order, then Creator and Professional (addendum §7). */
 export const STYLE_IDS = [
   'classic',
   'clear',
@@ -71,6 +71,7 @@ export const STYLE_IDS = [
   'linen',
   'horizon',
   'creator',
+  'professional',
 ] as const;
 export type StyleId = (typeof STYLE_IDS)[number];
 /** One published page per style: /@styleclassic, /@styleclear, … (ruling R6). */
@@ -333,16 +334,19 @@ export async function studioFixtures() {
     ...STYLE_IDS.map((style) =>
       studioPage(`style${style}nolinks`, styleDocument(style), { links: [] }),
     ),
-    // Creator in every link case (addendum §9.3), and with no photo and no bio (Review Focus 5).
-    ...LINK_CASES.map((links) =>
-      studioPage(`creatorlinks${links}`, styleDocument('creator'), {
-        links: LINKS_OF[links],
+    // Creator and Professional in every link case (addendum §9.3), and with no photo and no bio
+    // (Review Focus 5): /@<style>links<case>, /@<style>nophoto.
+    ...(['creator', 'professional'] as const).flatMap((style) => [
+      ...LINK_CASES.map((links) =>
+        studioPage(`${style}links${links}`, styleDocument(style), {
+          links: LINKS_OF[links],
+        }),
+      ),
+      studioPage(`${style}nophoto`, styleDocument(style), {
+        avatarPath: undefined,
+        bio: undefined,
       }),
-    ),
-    studioPage('creatornophoto', styleDocument('creator'), {
-      avatarPath: undefined,
-      bio: undefined,
-    }),
+    ]),
     // "Your cover" with each Settings cover kind, in Clear and in Stage (needsPhoto).
     ...(['clear', 'stage'] as const).flatMap((style) =>
       COVER_KINDS.map((kind) =>
