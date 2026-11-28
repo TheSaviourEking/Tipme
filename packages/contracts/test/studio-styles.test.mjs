@@ -865,6 +865,55 @@ test('Creator’s Tip keeps 3:1 against the page at its weakest edge, every acce
   assert.ok(lowest >= 3);
 });
 
+// Ruling S-R2, the phone's sticky bar (Creator plan Task 3): its `deep` pill sits on `bar`, the
+// page's bg at 85% (d9) over whatever scrolls under it, so its 1 px edge (`deepBarEdge`) keeps 3:1
+// against that bar over pure white and over pure black, the two ends anything under it can make.
+test('Creator’s sticky Tip pill keeps 3:1 against its 85% bar over anything, every accent and mode', () => {
+  const BAR = 217 / 255;
+  let lowest = Infinity;
+  for (const accent of [...CURATED, null])
+    for (const mode of MODES) {
+      const t = studioTokens('creator', accent)[mode];
+      assert.equal(t.bar, `${t.bg}d9`);
+      assert.match(t.deepBarEdge, /^#[0-9a-f]{6}$/, `${accent} ${mode}`);
+      const pairs = studioContrastPairs(
+        'creator',
+        accentValues('creator', accent, mode),
+        mode,
+        creatorTip(accent, mode),
+      );
+      for (const under of ['#ffffff', '#000000']) {
+        const bar = blend(t.bg, BAR, under);
+        const edge = contrastRatio(t.deepBarEdge, bar);
+        assert.ok(
+          edge >= 3,
+          `${accent} ${mode} over ${under}: ${edge.toFixed(2)}`,
+        );
+        lowest = Math.min(lowest, edge);
+        assert.deepEqual(
+          pairs.find(
+            (p) =>
+              p.name === `sticky Tip edge (deepBarEdge) on bar over ${under}`,
+          ),
+          {
+            name: `sticky Tip edge (deepBarEdge) on bar over ${under}`,
+            fg: t.deepBarEdge,
+            bg: bar,
+            min: 3,
+          },
+        );
+      }
+      // The look is kept where the in-page edge already holds on the bar.
+      if (
+        ['#ffffff', '#000000'].every(
+          (u) => contrastRatio(t.deepEdge, blend(t.bg, BAR, u)) >= 3,
+        )
+      )
+        assert.equal(t.deepBarEdge, t.deepEdge, `${accent} ${mode}`);
+    }
+  assert.ok(lowest >= 3);
+});
+
 test('Creator’s Tip edge holds 3:1 for every light fill the photo accent can make, in both modes', () => {
   // §6 step 3: light fills are clamped to OKLCH L .45–.55, chroma at most .16; labels are white.
   const dark = STUDIO_ACCENTS.blue.dark;

@@ -15,6 +15,7 @@ import {
   socialLinkProblem,
   socialLinksSchema,
   splitLinksByPlace,
+  linkRowWords,
   visibleLinks,
 } from '../dist/index.js';
 
@@ -505,4 +506,25 @@ test('with adult links hidden, a featured adult site leaves no row behind', () =
     icons.map((l) => l.platform),
     ['tiktok'],
   );
+});
+
+// Ruling S-R3 (owner, 28 Nov: nothing clipped at 320): a Creator or Professional row shows the
+// site's fixed featured words, except four whose words run past the row's one line; those use the
+// short forms of the templates design (2026-11-28-page-templates-design §7.2). The e2e fit test
+// measures every site's row words at 320.
+test("a row reads the site's featured words, or its short row form for four sites", () => {
+  const short = {
+    whatsapp: 'My WhatsApp channel',
+    twitch: 'Watch live on Twitch',
+    instagram: 'Follow on Instagram',
+    facebook: 'Follow on Facebook',
+  };
+  for (const key of SOCIAL_PLATFORM_KEYS)
+    assert.equal(
+      linkRowWords(key),
+      short[key] ?? SOCIAL_PLATFORMS[key].featured,
+      key,
+    );
+  // The featured key's words elsewhere don't change.
+  assert.equal(SOCIAL_PLATFORMS.whatsapp.featured, 'Join my WhatsApp channel');
 });

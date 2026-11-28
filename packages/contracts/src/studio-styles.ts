@@ -686,8 +686,13 @@ const SECOND_LINE_OPACITY = 1;
  * and chroma at the nearest lightness that does, away from the page (lighter in dark, darker in
  * light). Contrast with the page only grows that way, so a bisection finds it.
  */
-export function studioTipEdge(fill: Hex, bg: Hex, mode: 'light' | 'dark'): Hex {
-  const ok = (h: Hex) => contrastRatio(h, bg) >= 3;
+export function studioTipEdge(
+  fill: Hex,
+  bg: Hex | readonly Hex[],
+  mode: 'light' | 'dark',
+): Hex {
+  const grounds: readonly Hex[] = typeof bg === 'string' ? [bg] : bg;
+  const ok = (h: Hex) => grounds.every((g) => contrastRatio(h, g) >= 3);
   if (ok(fill)) return fill;
   const { l, c, h } = hexToOklch(fill);
   const at = (x: number) => oklchToHex({ l: x, c, h });
@@ -700,6 +705,15 @@ export function studioTipEdge(fill: Hex, bg: Hex, mode: 'light' | 'dark'): Hex {
   }
   return at(far);
 }
+
+/**
+ * The phone's sticky bar (§6.5): `bar` is the page's bg at 85% (`d9`) over whatever scrolls under
+ * it. Its two ends, over pure white and over pure black, bound every bar a visitor can see, so a
+ * pill edge that keeps 3:1 on both keeps it over anything (Creator plan Task 3, ruling S-R2).
+ */
+const BAR_ALPHA = 217 / 255;
+const barEnds = (bg: Hex) =>
+  [blend(bg, BAR_ALPHA, '#ffffff'), blend(bg, BAR_ALPHA, '#000000')] as const;
 
 export interface StudioContrastPair {
   name: string;
@@ -853,6 +867,16 @@ export function studioContrastPairs(
           n.bg,
           3,
         );
+        // The sticky bar's pill: its edge on the bar's two ends (over white, over black).
+        const barEdge = studioTipEdge(deep.fill, barEnds(n.bg), mode);
+        barEnds(n.bg).forEach((bar, i) =>
+          add(
+            `sticky Tip edge (deepBarEdge) on bar over ${i === 0 ? '#ffffff' : '#000000'}`,
+            barEdge,
+            bar,
+            3,
+          ),
+        );
       }
       break;
     }
@@ -881,8 +905,8 @@ export type StudioTokenMap = Record<string, string>;
  * Both modes' tokens for a page: the style's neutrals (extras included), the accent's three
  * values as `acc`, `accLabel` and `accText`, `bar` (bg at 85%), and the derived tokens a style
  * names in §9 (`chipOn` for Journal and Linen, Stage's `glow`, Tiles' `tileFocus`), and Creator's
- * Tip (`deep`, `deepEnd` the sheen's lower end, `deepLabel`, `deepEdge` its 1 px edge; addendum
- * §6.1, ruling S-R2).
+ * Tip (`deep`, `deepEnd` the sheen's lower end, `deepLabel`, `deepEdge` its 1 px edge, and
+ * `deepBarEdge` the sticky bar pill's edge; addendum §6.1, ruling S-R2).
  */
 export function studioTokens(
   style: StudioStyleId,
@@ -912,6 +936,7 @@ export function studioTokens(
       t.deepEnd = sheenEnd(deep.fill);
       t.deepLabel = deep.label;
       t.deepEdge = studioTipEdge(deep.fill, n.bg, mode);
+      t.deepBarEdge = studioTipEdge(deep.fill, barEnds(n.bg), mode);
     }
     return t;
   };

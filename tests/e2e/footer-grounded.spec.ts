@@ -223,8 +223,12 @@ test.describe('a tip page on its own web instance', () => {
       await visit(
         page,
         `/@short${style}`,
-        style === 'horizon' ? 2200 : true,
-        style === 'horizon' || style === 'sprint' ? 2400 : 1800,
+        // Horizon's and Creator's tall photo covers (Creator's desktop is about 1720 px).
+        style === 'horizon' || style === 'creator' ? 2200 : true,
+        // Creator's name and Tip follow its 564 px photo (addendum §7.1): about 1980 px on a phone.
+        style === 'horizon' || style === 'sprint' || style === 'creator'
+          ? 2400
+          : 1800,
       );
       await visit(page, `/@style${style}`, false);
     });

@@ -31,6 +31,11 @@ interface PlatformSpec {
   prefix?: string;
   /** The words on the featured key (Pro). Fixed per site: no free text to moderate. */
   featured: string;
+  /**
+   * A Creator or Professional row's words where `featured` runs past the row's one line at 320 px
+   * (ruling S-R3; the short forms of the templates design 2026-11-28 §7.2). Fixed per site.
+   */
+  row?: string;
 }
 
 const at = (pattern: string) => new RegExp(`^/${pattern}/?$`);
@@ -63,6 +68,7 @@ export const SOCIAL_PLATFORMS = {
     handle:
       /^\/(?!profile\.php|people\/|pages\/|groups\/|share\/|watch|events\/)([A-Za-z0-9.]{1,60})\/?$/,
     featured: 'Follow me on Facebook',
+    row: 'Follow on Facebook',
   },
   instagram: {
     label: 'Instagram',
@@ -73,6 +79,7 @@ export const SOCIAL_PLATFORMS = {
     handle:
       /^\/(?!p\/|reel\/|reels\/|stories\/|explore\/)([A-Za-z0-9._]{1,30})\/?$/,
     featured: 'Follow me on Instagram',
+    row: 'Follow on Instagram',
   },
   youtube: {
     label: 'YouTube',
@@ -111,6 +118,7 @@ export const SOCIAL_PLATFORMS = {
     // A channel only: a phone number has its own switch on the page.
     path: /^\/channel\/[A-Za-z0-9]{6,}\/?$/,
     featured: 'Join my WhatsApp channel',
+    row: 'My WhatsApp channel',
   },
   twitch: {
     label: 'Twitch',
@@ -120,6 +128,7 @@ export const SOCIAL_PLATFORMS = {
     hosts: ['twitch.tv', 'www.twitch.tv', 'm.twitch.tv'],
     handle: at('([A-Za-z0-9_]{1,25})'),
     featured: 'Watch me live on Twitch',
+    row: 'Watch live on Twitch',
   },
   kick: {
     label: 'Kick',
@@ -601,6 +610,12 @@ export function splitLinksByPlace(links: readonly SocialLink[]): {
     (spec(link.platform).place === 'icon' ? icons : rows).push(link);
   }
   return { icons, rows };
+}
+
+/** A Creator or Professional row's words: the site's short row form, else its featured words. */
+export function linkRowWords(platform: SocialPlatform): string {
+  const site = spec(platform);
+  return site.row ?? site.featured;
 }
 
 /** The stored links a Free page doesn't show: Pro sites, and Free sites past the first 3. */

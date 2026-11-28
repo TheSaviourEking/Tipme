@@ -79,3 +79,27 @@ test('Stage at 390 dark', async ({ page }) => {
     fullPage: true,
   });
 });
+
+// Creator is dark-first (addendum §7.1, §9.4): its phone and desktop in dark, its phone in light.
+for (const [width, mode] of [
+  [390, 'dark'],
+  [1440, 'dark'],
+  [390, 'light'],
+] as const)
+  test(`Creator at ${width} ${mode}`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto(`/dev/studio-lab?style=creator&mode=${mode}`);
+    await page.locator('.studio[data-style]').waitFor();
+    await page.evaluate(() => document.fonts.ready);
+    await page
+      .locator('form[data-skin][data-bar]')
+      .waitFor({ state: 'attached' });
+    await page.waitForFunction(() =>
+      [...document.images].every((i) => i.loading === 'lazy' || i.complete),
+    );
+    await expect(page).toHaveScreenshot(`studio-creator-${width}-${mode}.png`, {
+      animations: 'disabled',
+      caret: 'hide',
+      fullPage: true,
+    });
+  });

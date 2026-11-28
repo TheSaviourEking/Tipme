@@ -3,6 +3,7 @@ import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { resolve } from 'node:path';
 import type { PublicProfile } from '../../packages/contracts/src/profiles';
+import type { SocialLink } from '../../packages/contracts/src/social-links';
 import type { StudioDocument } from '../../packages/contracts/src/studio-document';
 import { API_ORIGIN, E2E_REVALIDATE_SECRET } from './stack';
 
@@ -58,7 +59,7 @@ export const STUDIO_HANDLES = [
 ] as const;
 export type StudioHandle = (typeof STUDIO_HANDLES)[number];
 
-/** The nine styles (styles spec §9), in the canvas's order. */
+/** The nine styles (styles spec §9), in the canvas's order, then Creator (addendum §7.1). */
 export const STYLE_IDS = [
   'classic',
   'clear',
@@ -69,10 +70,68 @@ export const STYLE_IDS = [
   'tiles',
   'linen',
   'horizon',
+  'creator',
 ] as const;
 export type StyleId = (typeof STYLE_IDS)[number];
 /** One published page per style: /@styleclassic, /@styleclear, … (ruling R6). */
 export const STYLE_HANDLES = STYLE_IDS.map((id) => `style${id}` as const);
+
+/**
+ * The link cases Creator and Professional are tested on (addendum §9.3, §5.4): /@<style>links<case>.
+ * `mixed` is eight links with Instagram, an icon site, featured (Review Focus 1).
+ */
+export const LINK_CASES = [
+  'none',
+  'oneicon',
+  'onerow',
+  'allicon',
+  'allrow',
+  'mixed',
+] as const;
+export type LinkCase = (typeof LINK_CASES)[number];
+const at = (platform: SocialLink['platform'], url: string) => ({
+  platform,
+  url,
+});
+export const LINKS_OF: Record<LinkCase, SocialLink[]> = {
+  none: [],
+  oneicon: [at('instagram', 'https://www.instagram.com/kemisings')],
+  onerow: [at('youtube', 'https://www.youtube.com/@kemisings')],
+  // The seven follow sites (contracts `place: 'icon'`).
+  allicon: [
+    at('tiktok', 'https://www.tiktok.com/@kemisings'),
+    at('facebook', 'https://facebook.com/kemisings'),
+    at('instagram', 'https://www.instagram.com/kemisings'),
+    at('x', 'https://x.com/kemisings'),
+    at('snapchat', 'https://www.snapchat.com/add/kemisings'),
+    at('threads', 'https://www.threads.com/@kemisings'),
+    at('linkedin', 'https://www.linkedin.com/in/kemisings'),
+  ],
+  // Eight row sites, at Pro's limit.
+  allrow: [
+    at('youtube', 'https://www.youtube.com/@kemisings'),
+    at('whatsapp', 'https://whatsapp.com/channel/0029VaKemiSings'),
+    at('twitch', 'https://www.twitch.tv/kemisings'),
+    at('kick', 'https://kick.com/kemisings'),
+    at('audiomack', 'https://audiomack.com/kemisings'),
+    at('spotify', 'https://open.spotify.com/artist/kemisings'),
+    at('website', 'https://kemisings.com'),
+    at('telegram', 'https://t.me/kemisings'),
+  ],
+  mixed: [
+    at('tiktok', 'https://www.tiktok.com/@kemisings'),
+    {
+      ...at('instagram', 'https://www.instagram.com/kemisings'),
+      featured: true,
+    },
+    at('youtube', 'https://www.youtube.com/@kemisings'),
+    at('x', 'https://x.com/kemisings'),
+    at('twitch', 'https://www.twitch.tv/kemisings'),
+    at('website', 'https://kemisings.com'),
+    at('linkedin', 'https://www.linkedin.com/in/kemisings'),
+    at('spotify', 'https://open.spotify.com/artist/kemisings'),
+  ],
+};
 
 /** The Settings cover kinds "Your cover" draws (§13, §14.8), for /@cover<style><kind>. */
 export const COVER_KINDS = [
@@ -134,6 +193,8 @@ function styleDocument(
     classic: { accent: 'green' },
     journal: { cover: 'plain' },
     stage: { mode: 'dark' },
+    // Creator is dark-first (addendum §7.1).
+    creator: { mode: 'dark' },
     signboard: { cover: 'plain' },
     tiles: { cover: 'plain' },
   };
@@ -272,6 +333,16 @@ export async function studioFixtures() {
     ...STYLE_IDS.map((style) =>
       studioPage(`style${style}nolinks`, styleDocument(style), { links: [] }),
     ),
+    // Creator in every link case (addendum §9.3), and with no photo and no bio (Review Focus 5).
+    ...LINK_CASES.map((links) =>
+      studioPage(`creatorlinks${links}`, styleDocument('creator'), {
+        links: LINKS_OF[links],
+      }),
+    ),
+    studioPage('creatornophoto', styleDocument('creator'), {
+      avatarPath: undefined,
+      bio: undefined,
+    }),
     // "Your cover" with each Settings cover kind, in Clear and in Stage (needsPhoto).
     ...(['clear', 'stage'] as const).flatMap((style) =>
       COVER_KINDS.map((kind) =>
