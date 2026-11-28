@@ -1,10 +1,12 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import fc from 'fast-check';
 import {
   ADULT_PLATFORMS,
   FREE_LINK_LIMIT,
   PRO_LINK_LIMIT,
   SOCIAL_PLATFORMS,
+  SOCIAL_PLATFORM_KEYS,
   detectPlatform,
   linkHandle,
   linksNeedPro,
@@ -12,6 +14,7 @@ import {
   profilePatchSchema,
   socialLinkProblem,
   socialLinksSchema,
+  splitLinksByPlace,
   visibleLinks,
 } from '../dist/index.js';
 
@@ -387,4 +390,119 @@ test('the profile form still takes, and ignores, the old three links for one rel
     socialsPublic: true,
   });
   assert.equal(parsed.success, true);
+});
+
+test('every site has a fixed place: follow sites are icons, the rest are rows', () => {
+  const placed = (place) =>
+    SOCIAL_PLATFORM_KEYS.filter((key) => SOCIAL_PLATFORMS[key].place === place);
+  assert.deepEqual(placed('icon'), [
+    'tiktok',
+    'facebook',
+    'instagram',
+    'x',
+    'snapchat',
+    'linkedin',
+    'threads',
+  ]);
+  assert.deepEqual(placed('row'), [
+    'youtube',
+    'whatsapp',
+    'twitch',
+    'kick',
+    'audiomack',
+    'boomplay',
+    'spotify',
+    'applemusic',
+    'soundcloud',
+    'website',
+    'telegram',
+    'patreon',
+    'selar',
+    'substack',
+    'onlyfans',
+    'fansly',
+  ]);
+  assert.equal(
+    placed('icon').length + placed('row').length,
+    SOCIAL_PLATFORM_KEYS.length,
+  );
+});
+
+test('the featured link is always the first row, whatever its site', () => {
+  const featuredIcon = splitLinksByPlace([
+    link('tiktok', 'https://tiktok.com/@a'),
+    link('instagram', 'https://instagram.com/a', true),
+    link('youtube', 'https://youtube.com/@a'),
+  ]);
+  assert.equal(featuredIcon.rows[0].platform, 'instagram');
+  assert.deepEqual(
+    featuredIcon.icons.map((l) => l.platform),
+    ['tiktok'],
+  );
+  assert.deepEqual(
+    featuredIcon.rows.map((l) => l.platform),
+    ['instagram', 'youtube'],
+  );
+
+  const featuredRow = splitLinksByPlace([
+    link('tiktok', 'https://tiktok.com/@a'),
+    link('twitch', 'https://twitch.tv/a'),
+    link('kick', 'https://kick.com/a'),
+    link('youtube', 'https://youtube.com/@a', true),
+  ]);
+  assert.deepEqual(
+    featuredRow.rows.map((l) => l.platform),
+    ['youtube', 'twitch', 'kick'],
+  );
+});
+
+test('each link lands once and each group keeps the saved order', () => {
+  const item = fc.constantFrom(...SOCIAL_PLATFORM_KEYS);
+  fc.assert(
+    fc.property(
+      fc.uniqueArray(item, { maxLength: 8 }),
+      fc.nat(8),
+      fc.boolean(),
+      (platforms, pick, hasFeatured) => {
+        const links = platforms.map((platform, i) =>
+          link(
+            platform,
+            `https://example.test/${platform}`,
+            hasFeatured && i === pick % Math.max(platforms.length, 1),
+          ),
+        );
+        const { icons, rows } = splitLinksByPlace(links);
+        const urls = [...icons, ...rows].map((l) => l.url);
+        assert.equal(new Set(urls).size, urls.length);
+        assert.deepEqual([...urls].sort(), links.map((l) => l.url).sort());
+        const order = (group) =>
+          group.map((l) => links.findIndex((x) => x.url === l.url));
+        const featuredFirst = rows[0]?.featured ? 1 : 0;
+        const ascending = (xs) => xs.every((x, i) => i === 0 || xs[i - 1] < x);
+        assert.ok(ascending(order(icons)));
+        assert.ok(ascending(order(rows.slice(featuredFirst))));
+        if (links.some((l) => l.featured)) assert.ok(rows[0].featured);
+      },
+    ),
+  );
+});
+
+test('with adult links hidden, a featured adult site leaves no row behind', () => {
+  const stored = [
+    link('tiktok', 'https://tiktok.com/@a'),
+    link('onlyfans', 'https://onlyfans.com/ada', true),
+    link('youtube', 'https://youtube.com/@a'),
+  ];
+  const { icons, rows } = splitLinksByPlace(
+    visibleLinks(stored, 'pro', { adult: false }),
+  );
+  assert.deepEqual(
+    rows.map((l) => l.platform),
+    ['youtube'],
+  );
+  assert.ok(!rows.some((l) => l.platform === 'onlyfans'));
+  assert.deepEqual(
+    icons.map((l) => l.platform),
+    ['tiktok'],
+  );
 });

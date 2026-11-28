@@ -8,6 +8,8 @@ import { z } from 'zod';
 
 export type SocialTier = 'free' | 'pro';
 
+export type LinkPlace = 'icon' | 'row';
+
 interface PlatformSpec {
   label: string;
   /** Letters drawn in the badge; brand logos are a later, brand-rules job. */
@@ -15,6 +17,8 @@ interface PlatformSpec {
   /** A light badge, for sites that are not one brand (a website) or are marked 18+. */
   light?: true;
   tier: SocialTier;
+  /** Where Creator and Professional draw it: follow sites are icons, the rest are rows. Fixed per site. */
+  place: LinkPlace;
   hosts: readonly string[];
   /** Any subdomain of these is the site too (a Substack publication). */
   subdomainsOf?: readonly string[];
@@ -38,6 +42,7 @@ export const SOCIAL_PLATFORMS = {
     label: 'TikTok',
     badge: 'TT',
     tier: 'free',
+    place: 'icon',
     hosts: ['tiktok.com', 'www.tiktok.com', 'm.tiktok.com'],
     handle: /^\/@([A-Za-z0-9._]{1,60})(?:\/|$)/,
     featured: 'Watch me on TikTok',
@@ -46,6 +51,7 @@ export const SOCIAL_PLATFORMS = {
     label: 'Facebook',
     badge: 'f',
     tier: 'free',
+    place: 'icon',
     // web.facebook.com is where Facebook sends many visitors in Nigeria; m. is its mobile site.
     hosts: [
       'facebook.com',
@@ -62,6 +68,7 @@ export const SOCIAL_PLATFORMS = {
     label: 'Instagram',
     badge: 'IG',
     tier: 'free',
+    place: 'icon',
     hosts: ['instagram.com', 'www.instagram.com'],
     handle:
       /^\/(?!p\/|reel\/|reels\/|stories\/|explore\/)([A-Za-z0-9._]{1,30})\/?$/,
@@ -71,6 +78,7 @@ export const SOCIAL_PLATFORMS = {
     label: 'YouTube',
     badge: 'YT',
     tier: 'free',
+    place: 'row',
     hosts: ['youtube.com', 'www.youtube.com', 'm.youtube.com'],
     redirect: /^\/redirect(?:\/|$)/,
     handle: /^\/@([A-Za-z0-9._-]{1,60})(?:\/|$)/,
@@ -80,6 +88,7 @@ export const SOCIAL_PLATFORMS = {
     label: 'X',
     badge: 'X',
     tier: 'free',
+    place: 'icon',
     hosts: ['x.com', 'www.x.com', 'twitter.com', 'www.twitter.com'],
     handle: /^\/(?!i\/|home|search|hashtag\/)([A-Za-z0-9_]{1,15})\/?$/,
     featured: 'Follow me on X',
@@ -88,6 +97,7 @@ export const SOCIAL_PLATFORMS = {
     label: 'Snapchat',
     badge: 'SC',
     tier: 'free',
+    place: 'icon',
     hosts: ['snapchat.com', 'www.snapchat.com'],
     handle: /^\/(?:add\/|@)([A-Za-z0-9._-]{1,60})\/?$/,
     featured: 'Add me on Snapchat',
@@ -96,6 +106,7 @@ export const SOCIAL_PLATFORMS = {
     label: 'WhatsApp channel',
     badge: 'WA',
     tier: 'free',
+    place: 'row',
     hosts: ['whatsapp.com', 'www.whatsapp.com'],
     // A channel only: a phone number has its own switch on the page.
     path: /^\/channel\/[A-Za-z0-9]{6,}\/?$/,
@@ -105,6 +116,7 @@ export const SOCIAL_PLATFORMS = {
     label: 'Twitch',
     badge: 'Tw',
     tier: 'free',
+    place: 'row',
     hosts: ['twitch.tv', 'www.twitch.tv', 'm.twitch.tv'],
     handle: at('([A-Za-z0-9_]{1,25})'),
     featured: 'Watch me live on Twitch',
@@ -113,6 +125,7 @@ export const SOCIAL_PLATFORMS = {
     label: 'Kick',
     badge: 'K',
     tier: 'free',
+    place: 'row',
     hosts: ['kick.com', 'www.kick.com'],
     handle: at('([A-Za-z0-9_-]{1,25})'),
     featured: 'Watch me live on Kick',
@@ -121,6 +134,7 @@ export const SOCIAL_PLATFORMS = {
     label: 'Audiomack',
     badge: 'AM',
     tier: 'free',
+    place: 'row',
     hosts: ['audiomack.com', 'www.audiomack.com'],
     handle: at('([A-Za-z0-9_-]{1,60})'),
     featured: 'Listen on Audiomack',
@@ -129,6 +143,7 @@ export const SOCIAL_PLATFORMS = {
     label: 'Boomplay',
     badge: 'BP',
     tier: 'free',
+    place: 'row',
     hosts: ['boomplay.com', 'www.boomplay.com'],
     featured: 'Listen on Boomplay',
   },
@@ -136,6 +151,7 @@ export const SOCIAL_PLATFORMS = {
     label: 'Spotify',
     badge: 'SP',
     tier: 'free',
+    place: 'row',
     hosts: ['open.spotify.com'],
     featured: 'Listen on Spotify',
   },
@@ -143,6 +159,7 @@ export const SOCIAL_PLATFORMS = {
     label: 'Apple Music',
     badge: 'AP',
     tier: 'free',
+    place: 'row',
     hosts: ['music.apple.com'],
     featured: 'Listen on Apple Music',
   },
@@ -150,6 +167,7 @@ export const SOCIAL_PLATFORMS = {
     label: 'SoundCloud',
     badge: 'So',
     tier: 'free',
+    place: 'row',
     hosts: ['soundcloud.com', 'www.soundcloud.com', 'm.soundcloud.com'],
     handle: at('([a-z0-9_-]{1,60})'),
     featured: 'Listen on SoundCloud',
@@ -160,6 +178,7 @@ export const SOCIAL_PLATFORMS = {
     badge: 'www',
     light: true,
     tier: 'pro',
+    place: 'row',
     hosts: [],
     featured: 'Visit my website',
   },
@@ -167,6 +186,7 @@ export const SOCIAL_PLATFORMS = {
     label: 'Telegram',
     badge: 'TG',
     tier: 'pro',
+    place: 'row',
     hosts: ['t.me', 'telegram.me'],
     // Public usernames only: invite links (t.me/+…, t.me/joinchat/…) open private groups.
     path: /^\/(?!joinchat(?:\/|$))[A-Za-z][A-Za-z0-9_]{3,31}\/?$/,
@@ -177,6 +197,7 @@ export const SOCIAL_PLATFORMS = {
     label: 'LinkedIn',
     badge: 'in',
     tier: 'pro',
+    place: 'icon',
     hosts: ['linkedin.com', 'www.linkedin.com'],
     handle: /^\/(in\/[A-Za-z0-9_-]{3,100})\/?$/,
     prefix: '',
@@ -186,6 +207,7 @@ export const SOCIAL_PLATFORMS = {
     label: 'Threads',
     badge: 'Th',
     tier: 'pro',
+    place: 'icon',
     // threads.com since April 2025; threads.net still redirects there.
     hosts: ['threads.com', 'www.threads.com', 'threads.net', 'www.threads.net'],
     handle: /^\/@([A-Za-z0-9._]{1,30})\/?$/,
@@ -196,6 +218,7 @@ export const SOCIAL_PLATFORMS = {
     badge: 'P',
     light: true,
     tier: 'pro',
+    place: 'row',
     hosts: ['patreon.com', 'www.patreon.com'],
     handle: /^\/(?:c\/)?([A-Za-z0-9_-]{1,64})\/?$/,
     featured: 'Support me on Patreon',
@@ -205,6 +228,7 @@ export const SOCIAL_PLATFORMS = {
     badge: 'Se',
     light: true,
     tier: 'pro',
+    place: 'row',
     // selar.com since February 2025; selar.co links still redirect.
     hosts: ['selar.com', 'www.selar.com', 'selar.co'],
     handle: plainName,
@@ -215,6 +239,7 @@ export const SOCIAL_PLATFORMS = {
     badge: 'Su',
     light: true,
     tier: 'pro',
+    place: 'row',
     hosts: ['substack.com', 'www.substack.com'],
     subdomainsOf: ['substack.com'],
     handle: /^\/@([A-Za-z0-9_-]{1,60})\/?$/,
@@ -225,6 +250,7 @@ export const SOCIAL_PLATFORMS = {
     badge: '18+',
     light: true,
     tier: 'pro',
+    place: 'row',
     hosts: ['onlyfans.com', 'www.onlyfans.com'],
     handle: plainName,
     featured: 'Find me on OnlyFans',
@@ -234,6 +260,7 @@ export const SOCIAL_PLATFORMS = {
     badge: '18+',
     light: true,
     tier: 'pro',
+    place: 'row',
     hosts: ['fansly.com', 'www.fansly.com'],
     handle: plainName,
     featured: 'Find me on Fansly',
@@ -556,6 +583,24 @@ export function visibleLinks(
   if (plan === 'pro') return allowed.slice(0, PRO_LINK_LIMIT);
   const shown = freeIndexes(allowed);
   return allowed.filter((_, index) => shown.has(index)).map(unfeatured);
+}
+
+/**
+ * Creator and Professional only: follow sites in the icon row, the rest as rows; the featured link
+ * is always the first row. Saved order is kept in each group.
+ */
+export function splitLinksByPlace(links: readonly SocialLink[]): {
+  icons: SocialLink[];
+  rows: SocialLink[];
+} {
+  const featured = links.find((link) => link.featured);
+  const icons: SocialLink[] = [];
+  const rows: SocialLink[] = featured ? [featured] : [];
+  for (const link of links) {
+    if (link === featured) continue;
+    (spec(link.platform).place === 'icon' ? icons : rows).push(link);
+  }
+  return { icons, rows };
 }
 
 /** The stored links a Free page doesn't show: Pro sites, and Free sites past the first 3. */
