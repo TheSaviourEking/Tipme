@@ -17,6 +17,7 @@ import {
   OPS_TOTP_KEY,
   WEB,
   browserHeaders,
+  openEventStream,
   opsSignIn,
   startStack,
 } from './helpers.mjs';
@@ -33,16 +34,24 @@ startTelemetry({
 
 let database;
 let stack;
+const streams = new Set();
 before(async () => {
   database = await openTestDatabase();
   await database.reset();
   await ops.ensureOwnerRole(database.db);
   stack = await startStack({
     databaseUrl: database.url,
-    apiEnv: { WEB_ORIGIN: WEB, RATE_LIMIT_AUTH_PER_HOUR: '1000' },
+    apiEnv: {
+      WEB_ORIGIN: WEB,
+      LIVE_UPDATES_ENABLED: 'true',
+      RATE_LIMIT_LIVE_CONNECT_PER_MIN: '100000',
+      RATE_LIMIT_AUTH_PER_HOUR: '1000',
+    },
   });
 });
 after(async () => {
+  // An open stream holds app.close() forever.
+  for (const stream of streams) stream.close();
   await stack.stop();
   await database.close();
 });
@@ -1848,4 +1857,66 @@ test('the guard checks a permission whenever one is present, and refuses both de
   // Both on one route: never quietly wider than the permission.
   assert.equal(routeAllows('fees.manage', true, held), false);
   assert.equal(routeAllows('issues.view', true, held), false);
+});
+
+// Live updates: staff streams hear the approvals list move (addendum §3.1).
+const READY = /^data: \{"type":"ready"\}$/;
+const APPROVALS = /^data: \{"type":"ops\.approvals\.changed"\}$/;
+async function signedInStaff(phone) {
+  const session = await opsSignIn(stack.api, database.db, phone);
+  const [{ id }] = await q(`SELECT id FROM users WHERE phone_e164 = $1`, [
+    phone,
+  ]);
+  const [{ id: grantId }] = await q(
+    `SELECT id FROM ops_sessions WHERE user_id = $1 AND revoked_at IS NULL`,
+    [id],
+  );
+  const stream = await openEventStream(`${stack.api}/v1/ops/events`, {
+    cookie: session.cookie,
+    origin: WEB,
+  });
+  streams.add(stream);
+  await stream.waitFor(READY);
+  return { ...session, id, grantId, stream };
+}
+
+test("a pending approval reaches a second staff member's stream", async () => {
+  const first = await signedInStaff('+2348037700001');
+  const second = await signedInStaff('+2348037700002');
+  const outcome = await requestSeriousAction(database.db, {
+    name: ACTION,
+    payload: { value: 'x' },
+    actorId: first.id,
+    grantId: first.grantId,
+    reason: REASON,
+  });
+  assert.equal(outcome.state, 'pending');
+  await second.stream.waitFor(APPROVALS, 5000);
+});
+
+test("a decision reaches the requester's stream", async () => {
+  const first = await signedInStaff('+2348037700003');
+  const second = await signedInStaff('+2348037700004');
+  const outcome = await requestSeriousAction(database.db, {
+    name: ACTION,
+    payload: { value: 'x' },
+    actorId: first.id,
+    grantId: first.grantId,
+    reason: REASON,
+  });
+  // The request's own signal lands first: look only at what the decision adds.
+  await first.stream.waitFor(APPROVALS, 5000);
+  const seen = () =>
+    first.stream.frames.filter((f) => APPROVALS.test(f)).length;
+  const before = seen();
+  const response = await fetch(
+    `${stack.api}/v1/ops/approvals/${outcome.requestId}/approve`,
+    {
+      method: 'POST',
+      headers: browserHeaders(second.cookie),
+      body: JSON.stringify({ code: await second.nextCode() }),
+    },
+  );
+  assert.equal(response.status, 200);
+  await waitFor(() => seen() > before, 5000);
 });

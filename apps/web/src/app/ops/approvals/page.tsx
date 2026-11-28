@@ -18,6 +18,8 @@ import {
   Slip,
   TextareaField,
 } from '@tipme/ui';
+import { useLiveEvents } from '@/components/live/live-provider';
+import type { LiveRead } from '@/lib/live-refetch';
 import { ReasonAction } from '@/components/ops/reason-action';
 import { when } from '@/lib/ops-client';
 import {
@@ -28,6 +30,8 @@ import {
 } from '@/lib/ops-answers';
 import { actionWords, opsFetch } from '@/lib/ops-staff-api';
 import { LoadFailed } from '@/components/dashboard/load-failed';
+
+const APPROVALS_CHANGED = ['ops.approvals.changed'] as const;
 
 type Said = {
   tone: 'success' | 'error' | 'neutral';
@@ -277,16 +281,19 @@ export default function ApprovalsPage() {
   const [said, setSaid] = useState<Said | null>(null);
   const saidAt = useRef<HTMLDivElement>(null);
 
-  const load = useCallback(async () => {
+  // `live`: the stream started this read (not the person), so it is not staff activity.
+  const load = useCallback(async (live?: LiveRead) => {
     const [waiting, everything] = await Promise.all([
-      opsFetch<OpsApproval[]>('/v1/ops/approvals?status=pending'),
-      opsFetch<OpsApproval[]>('/v1/ops/approvals'),
+      opsFetch<OpsApproval[]>('/v1/ops/approvals?status=pending', live),
+      opsFetch<OpsApproval[]>('/v1/ops/approvals', live),
     ]);
     setFailed(!waiting.ok);
     if (waiting.ok) setPending(waiting.data);
     setHistoryFailed(!everything.ok);
     if (everything.ok) setAll(everything.data);
   }, []);
+  // Another staff member asks, decides or cancels: the queue reads again (any staff hears it).
+  useLiveEvents(APPROVALS_CHANGED, (live) => load(live));
   useEffect(() => {
     // Only the first read waits on this: load's state changes come after its answers.
     // eslint-disable-next-line react-hooks/set-state-in-effect -- nothing is set before the await

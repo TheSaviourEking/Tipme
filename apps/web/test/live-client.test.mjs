@@ -4,6 +4,7 @@ import {
   LIVE_TIMING,
   backoffDelay,
   createLiveClient,
+  probeAnswer,
 } from '../src/lib/live-client.ts';
 
 const CONNECTING = 0;
@@ -86,6 +87,7 @@ function harness(o = {}) {
   let probeAnswer = o.probe ?? 'ok';
   let random = o.random ?? 0.5;
   const client = createLiveClient({
+    ...(o.timing ? { timing: o.timing } : {}),
     url: 'http://api.test/v1/me/events',
     EventSource: FakeEventSource,
     now: timers.now,
@@ -573,4 +575,97 @@ test('the client waits within the same range the draining hub sends (one shared 
   const { LIVE_DRAIN_RETRY_MS } = await import('@tipme/contracts');
   assert.equal(LIVE_TIMING.closedRetryMinMs, LIVE_DRAIN_RETRY_MS.min);
   assert.equal(LIVE_TIMING.closedRetryMaxMs, LIVE_DRAIN_RETRY_MS.max);
+});
+
+// The staff stream (addendum §3.4): a slower fallback poll, and no timed refresh while connected.
+const OPS_TIMING = { pollMs: 30_000, pollJitterMs: 3_000, safetyMs: null };
+
+test('ops timing polls every 30 s ± 3 s while degraded', async () => {
+  for (const r of [0, 0.5, 0.999]) {
+    const h = harness({ random: r, timing: OPS_TIMING });
+    h.client.start();
+    for (let i = 0; i < 3; i += 1) {
+      h.es.emitOpen();
+      h.es.emitError(false);
+      await flush();
+      // Past the backoff (below 1 s, then 2 s) to the next connect; the third failure polls.
+      if (i < 2) await h.timers.advance(2_000);
+    }
+    assert.equal(h.client.status, 'polling', `random ${r}`);
+    const from = h.timers.now();
+    h.resyncs.length = 0;
+    // The stream retry (every 60 s) opens a source that never answers; keep it failing.
+    for (let s = 0; s < 20; s += 1) {
+      await h.timers.advance(10_000);
+      if (!h.es.closed && h.es.readyState !== CLOSED) {
+        h.es.emitError(true);
+        await flush();
+      }
+    }
+    const times = [from, ...h.resyncs];
+    assert.ok(h.resyncs.length >= 5, `random ${r}: ${h.resyncs.length}`);
+    for (let i = 1; i < times.length; i += 1) {
+      const gap = times[i] - times[i - 1];
+      assert.ok(gap >= 27_000 && gap <= 33_000, `random ${r}: gap ${gap}`);
+    }
+    h.client.stop();
+  }
+});
+
+test('safetyMs null makes no timed resync while connected', async () => {
+  const h = harness({ timing: OPS_TIMING });
+  h.client.start();
+  await h.ready();
+  // 20 minutes, visible, with heartbeats every 20 s keeping the stream alive.
+  for (let s = 0; s < 60; s += 1) {
+    await h.timers.advance(20_000);
+    h.es.heartbeat();
+  }
+  assert.equal(h.client.status, 'connected');
+  assert.equal(h.resyncs.length, 1, 'only the ready');
+  assert.equal(h.sources.length, 1);
+});
+
+test('the default timing keeps the dashboard’s 20 s poll and 5-minute safety refresh', () => {
+  assert.equal(LIVE_TIMING.pollMs, 20_000);
+  assert.equal(LIVE_TIMING.pollJitterMs, 2_000);
+  assert.equal(LIVE_TIMING.safetyMs, 300_000);
+});
+
+test('onReady fires on every ready, including after a server close', async () => {
+  const h = harness({ random: 0 });
+  let readies = 0;
+  const off = h.client.onReady(() => (readies += 1));
+  h.client.start();
+  await h.ready();
+  assert.equal(readies, 1);
+  h.es.emitMessage({ type: 'tips.changed' });
+  h.es.emitMessage({ type: 'resync' });
+  await h.timers.advance(0);
+  assert.equal(readies, 1, 'a signal or resync is not a ready');
+  // The server ends a healthy stream: the client comes back after 1–10 s and gets a new ready.
+  h.es.emitError(false);
+  await h.timers.advance(1000);
+  assert.equal(h.sources.length, 2);
+  await h.ready();
+  assert.equal(readies, 2);
+  off();
+  h.es.emitError(false);
+  await h.timers.advance(1000);
+  await h.ready();
+  assert.equal(readies, 2, 'unsubscribed');
+});
+
+test('the probe reads 404 as signed out on the staff stream only', () => {
+  // The staff stream answers 404 when the grant has ended (no session, no grant, a lapsed code).
+  assert.equal(probeAnswer(404, 'ops'), 'unauthenticated');
+  assert.equal(probeAnswer(404, 'me'), 'error');
+  for (const stream of ['me', 'ops']) {
+    assert.equal(probeAnswer(204, stream), 'disabled');
+    assert.equal(probeAnswer(401, stream), 'unauthenticated');
+    assert.equal(probeAnswer(429, stream), 'refused');
+    assert.equal(probeAnswer(503, stream), 'refused');
+    assert.equal(probeAnswer(200, stream), 'ok');
+    assert.equal(probeAnswer(500, stream), 'error');
+  }
 });

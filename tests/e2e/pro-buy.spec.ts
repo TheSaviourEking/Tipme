@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { expectAccessible, signInWithEmail, signUpRecipient } from './helpers';
+import { API_ORIGIN } from './stack';
 
 // Paid Pro on the web (plan Tasks 7, 12, 13; ProPage and ProBadge boards). The e2e API runs with
 // PRO_BILLING_ENABLED on and the pretend provider; the "off" and "no price" states answer the
@@ -183,7 +184,11 @@ test('Settings Plan: buy by bank transfer, confirmed by the partner, then one mo
   await expect(plan).not.toContainText(PROVIDER);
   await expectAccessible(page);
 
-  // Hold the purchase's status until the "confirming" step has been seen.
+  // Hold the purchase's status until the "confirming" step has been seen. Live updates off (tests
+  // AGENTS rule): a held read hides the signal's change, and a connected slip has no timer.
+  await page.route('**/v1/me/events', (route) =>
+    route.fulfill({ status: 204 }),
+  );
   let hold = true;
   await page.route('**/v1/me/pro/purchases/*', async (route) => {
     if (!hold) return route.continue();
@@ -619,3 +624,111 @@ for (const [label, size] of [
       path: testInfo.outputPath(`${label}-pro-collect-no-balance.png`),
     });
   });
+
+// Live updates (addendum §3.7): while the dashboard stream is connected the "confirming" slip reads
+// the purchase only on pro.changed, profile.changed and resyncs; refused, it polls as today.
+const PURCHASE_READ = /\/v1\/me\/pro\/purchases\/[0-9a-f-]{36}$/;
+
+/** Every read of the followed purchase, with its time. */
+function recordPurchaseReads(page: Page) {
+  const reads: number[] = [];
+  page.on('request', (request) => {
+    if (request.method() === 'GET' && PURCHASE_READ.test(request.url()))
+      reads.push(Date.now());
+  });
+  return reads;
+}
+
+/**
+ * Opens a purchase and leaves the pretend checkout unpaid, back on Settings: the slip follows it
+ * until the test pays. Returns the checkout's reference.
+ */
+async function openUnpaidPurchase(page: Page) {
+  await page.goto('/dashboard/settings#plan');
+  const plan = page.locator('#pro');
+  await plan.getByRole('button', { name: 'Get Pro · ₦5,000 a month' }).click();
+  await plan.getByRole('button', { name: 'Continue to payment' }).click();
+  await page.waitForURL(/\/mock-checkout\/mock_pro_/);
+  return decodeURIComponent(new URL(page.url()).pathname.split('/').pop()!);
+}
+
+/** The pretend partner is paid now: its one signed webhook reaches the API. */
+async function payPurchase(page: Page, reference: string) {
+  const response = await page.request.post(
+    `${API_ORIGIN}/v1/mock-provider/checkout/${encodeURIComponent(reference)}`,
+    { data: { outcome: 'succeed', method: 'card' } },
+  );
+  expect(response.ok()).toBe(true);
+}
+
+const confirmingSlip = (page: Page) =>
+  page
+    .locator('#pro')
+    .getByRole('status')
+    .filter({ hasText: 'We’re confirming your payment' });
+const paidSlip = (page: Page) =>
+  page
+    .locator('#pro')
+    .getByRole('status')
+    .filter({ hasText: 'Payment confirmed' });
+
+test('confirming turns paid without polling while connected', async ({
+  page,
+}, testInfo) => {
+  test.setTimeout(90_000);
+  await signUpRecipient(page, testInfo);
+  const reference = await openUnpaidPurchase(page);
+  const reads = recordPurchaseReads(page);
+  await page.goto('/dashboard/settings#plan');
+  await expect(confirmingSlip(page)).toBeVisible();
+  await expect(page.locator('[data-live="connected"]')).toBeAttached({
+    timeout: 10_000,
+  });
+  // The stream's ready is a resync, which reads once (ruling L-R13); let it land.
+  await page.waitForTimeout(1000);
+  const atReady = reads.length;
+  // Polling would read every second here (ten checks), then every 2 s: none while connected.
+  await page.waitForTimeout(6000);
+  expect(reads.length).toBe(atReady);
+  await expect(page.locator('[data-live="connected"]')).toBeAttached();
+  const paidAt = Date.now();
+  await payPurchase(page, reference);
+  await expect(paidSlip(page)).toBeVisible({ timeout: 5000 });
+  expect(Date.now() - paidAt).toBeLessThan(5000);
+  // The pretend partner sends one webhook for a Pro payment (payment.succeeded; ruling L-R21):
+  // its pro.changed and profile.changed arrive together and are read once.
+  expect(reads.length - atReady).toBe(1);
+  // Answered: the slip stops reading.
+  const settled = reads.length;
+  await page.waitForTimeout(3000);
+  expect(reads.length).toBe(settled);
+  await expect(page.locator('#pro')).not.toContainText(PROVIDER);
+});
+
+test('with the stream refused, confirming polls as today', async ({
+  page,
+}, testInfo) => {
+  test.setTimeout(90_000);
+  await signUpRecipient(page, testInfo);
+  const reference = await openUnpaidPurchase(page);
+  let streams = 0;
+  await page.route('**/v1/me/events', (route) => {
+    streams += 1;
+    return route.abort();
+  });
+  const reads = recordPurchaseReads(page);
+  await page.goto('/dashboard/settings#plan');
+  await expect(confirmingSlip(page)).toBeVisible();
+  await page.waitForTimeout(6000);
+  expect(streams).toBeGreaterThanOrEqual(1);
+  // nextCheckDelay: every second for the first ten checks.
+  expect(reads.length).toBeGreaterThanOrEqual(5);
+  expect(reads.length).toBeLessThanOrEqual(9);
+  const gaps = reads.slice(1).map((at, i) => at - reads[i]!);
+  for (const gap of gaps.slice(0, 4)) {
+    expect(gap).toBeGreaterThan(700);
+    expect(gap).toBeLessThan(2000);
+  }
+  await payPurchase(page, reference);
+  await expect(paidSlip(page)).toBeVisible({ timeout: 5000 });
+});

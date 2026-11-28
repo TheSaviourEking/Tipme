@@ -2,6 +2,7 @@ import {
   LIVE_DRAIN_RETRY_MS,
   LIVE_RECIPIENT_TYPES,
   LIVE_STAFF_TYPES,
+  LIVE_TIP_TYPES,
   type LiveEventType,
 } from '@tipme/contracts';
 
@@ -42,6 +43,18 @@ export interface LiveClientDeps {
   probe(): Promise<LiveProbe>;
   /** The armed tip sound (plan note 3): a hidden tab keeps its stream while this is true. */
   keepOpenWhenHidden(): boolean;
+  /**
+   * Per-stream overrides of LIVE_TIMING. The staff stream polls every 30 s ± 3 s while degraded
+   * and has no safety refresh (`safetyMs: null`): no timed requests while connected (addendum §3.4).
+   */
+  timing?: LiveTimingOverrides;
+}
+
+export interface LiveTimingOverrides {
+  pollMs?: number;
+  pollJitterMs?: number;
+  /** `null`: no safety refresh while connected. */
+  safetyMs?: number | null;
 }
 
 export interface LiveClient {
@@ -55,6 +68,8 @@ export interface LiveClient {
   onResync(fn: (o: { immediate: boolean }) => void): () => void;
   onStatus(fn: (status: LiveStatus) => void): () => void;
   onSignedOut(fn: () => void): () => void;
+  /** Every `ready` message: the first, and each one after a reconnect. */
+  onReady(fn: () => void): () => void;
   visibilityChanged(): void;
   online(): void;
   readonly status: LiveStatus;
@@ -80,7 +95,22 @@ const CLOSED = 2;
 const KNOWN: ReadonlySet<string> = new Set([
   ...LIVE_RECIPIENT_TYPES,
   ...LIVE_STAFF_TYPES,
+  // A receipt's stream (tip-live.ts): its one signal.
+  ...LIVE_TIP_TYPES,
 ]);
+
+/**
+ * What a probe's status code means: 204 is "turned off", 401 signed out, 429/503 a refusal. The
+ * staff stream answers 404 when the grant has ended (no session, no grant, or a lapsed code), which
+ * is signed out of the admin area too: the shell then asks /v1/ops/me where this person stands.
+ */
+export function probeAnswer(status: number, stream: 'me' | 'ops'): LiveProbe {
+  if (status === 204) return 'disabled';
+  if (status === 401) return 'unauthenticated';
+  if (stream === 'ops' && status === 404) return 'unauthenticated';
+  if (status === 429 || status === 503) return 'refused';
+  return status >= 200 && status < 300 ? 'ok' : 'error';
+}
 
 /** Full jitter: a random wait below 1, 2, 4 … 60 s for attempt 1, 2, 3 …. */
 export function backoffDelay(attempt: number, random: () => number): number {
@@ -106,6 +136,13 @@ export function createLiveClient(deps: LiveClientDeps): LiveClient {
   const resyncListeners = new Set<(o: { immediate: boolean }) => void>();
   const statusListeners = new Set<(status: LiveStatus) => void>();
   const signedOutListeners = new Set<() => void>();
+  const readyListeners = new Set<() => void>();
+  const pollMs = deps.timing?.pollMs ?? LIVE_TIMING.pollMs;
+  const pollJitterMs = deps.timing?.pollJitterMs ?? LIVE_TIMING.pollJitterMs;
+  const safetyMs =
+    deps.timing?.safetyMs === undefined
+      ? LIVE_TIMING.safetyMs
+      : deps.timing.safetyMs;
   const timers = new Map<TimerName, unknown>();
 
   let status: LiveStatus = 'idle';
@@ -113,7 +150,7 @@ export function createLiveClient(deps: LiveClientDeps): LiveClient {
   let source: EventSourceLike | null = null;
   let opened = false;
   let failures = 0;
-  /** Degraded: refetch every 20 s while visible. */
+  /** Degraded: refetch every pollMs (20 s by default) while visible. */
   let polling = false;
   /** The stream was closed because the tab was hidden; reopen when it is visible. */
   let sleeping = false;
@@ -186,26 +223,27 @@ export function createLiveClient(deps: LiveClientDeps): LiveClient {
   };
 
   const armSafety = () => {
+    if (safetyMs === null) return;
     later(
       'safety',
       () => {
         if (ready && !polling && deps.visible()) resync();
         armSafety();
       },
-      LIVE_TIMING.safetyMs,
+      safetyMs,
     );
   };
 
   const schedulePoll = () => {
     if (!polling || !deps.visible()) return;
-    const jitter = (deps.random() * 2 - 1) * LIVE_TIMING.pollJitterMs;
+    const jitter = (deps.random() * 2 - 1) * pollJitterMs;
     later(
       'poll',
       () => {
         resync();
         schedulePoll();
       },
-      LIVE_TIMING.pollMs + jitter,
+      pollMs + jitter,
     );
   };
 
@@ -326,6 +364,7 @@ export function createLiveClient(deps: LiveClientDeps): LiveClient {
         stopPolling();
         statusNow();
         armSafety();
+        for (const fn of [...readyListeners]) fn();
         if (!everReady || !herd) {
           everReady = true;
           herd = false;
@@ -447,6 +486,10 @@ export function createLiveClient(deps: LiveClientDeps): LiveClient {
     onSignedOut(fn) {
       signedOutListeners.add(fn);
       return () => signedOutListeners.delete(fn);
+    },
+    onReady(fn) {
+      readyListeners.add(fn);
+      return () => readyListeners.delete(fn);
     },
     visibilityChanged() {
       if (!running) return;

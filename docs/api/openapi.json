@@ -14988,6 +14988,43 @@
         "x-tipme-rate-limit": "auth_verify"
       }
     },
+    "/v1/ops/events": {
+      "get": {
+        "operationId": "OpsLive.ops",
+        "tags": [
+          "OpsLive"
+        ],
+        "responses": {
+          "200": {
+            "description": "A text/event-stream of change signals for signed-in staff with a live admin grant: `retry: 5000`, then `data: {\"type\":\"ready\"}`, then `data: {\"type\":\"<signal>\"}` lines and a heartbeat (a `: hb` comment and an `hb` event) every 20 s. Only the signals the grant's permissions allow; signals carry only a type, never data. Connecting does not count as activity on the grant, and the stream ends at the grant's expiry or idle deadline, or with `session.ended` when the grant ends or its permissions change. 204 while live updates are off. 404 without a live grant. 429 LIVE_LIMIT past 8 streams for one person; 503 LIVE_UNAVAILABLE (Retry-After: 30) when this copy is full or stopping.",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-any",
+        "x-tipme-rate-limit": "live_connect",
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
     "/v1/ops/fee-waivers": {
       "get": {
         "operationId": "OpsFeeWaivers.state",
@@ -22019,6 +22056,48 @@
         },
         "x-tipme-access": "status-token",
         "x-tipme-rate-limit": "business_note"
+      }
+    },
+    "/v1/tips/{tipId}/events": {
+      "get": {
+        "operationId": "TipLive.events",
+        "tags": [
+          "TipLive"
+        ],
+        "parameters": [
+          {
+            "name": "tipId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A text/event-stream for one tip's receipt, with the receipt's status token as `Authorization: Bearer <token>`: `retry: 5000`, then `data: {\"type\":\"ready\"}`, then `data: {\"type\":\"tip.changed\"}` whenever the tip moves, and a heartbeat (a `: hb` comment and an `hb` event) every 20 s. On a signal, re-read `GET /v1/tips/{tipId}/status`. The stream ends after 15 minutes, or once the tip is final. 204 while live updates are off, and for a tip that is already paid, declined or cancelled. 404, as the status route, for a missing or wrong token or an unknown tip. 429 past 10 connects per tip in 15 minutes, or past 3 open streams for one tip (LIVE_LIMIT); 503 LIVE_UNAVAILABLE (Retry-After: 30) when this copy is full or stopping.",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "status-token",
+        "x-tipme-rate-limit": "live_connect"
       }
     },
     "/v1/tips/{tipId}/recognition/stop": {

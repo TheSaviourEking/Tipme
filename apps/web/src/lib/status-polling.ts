@@ -1,6 +1,7 @@
 const SECOND = 1000;
 const MINUTE = 60 * SECOND;
-const GIVE_UP_AFTER_MS = 15 * MINUTE;
+/** A receipt's round of checks, polling or following its stream, ends after this. */
+export const GIVE_UP_AFTER_MS = 15 * MINUTE;
 
 /**
  * When the receipt checks the tip's status again: every second for the first ten checks, then

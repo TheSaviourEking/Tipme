@@ -96,7 +96,7 @@ export function startTelemetry(options: TelemetryOptions): void {
       new HttpInstrumentation({
         // 30-minute stream requests would swamp the API's latency histogram and p95.
         ignoreIncomingRequestHook: (request) =>
-          LIVE_PATHS.has(request.url?.split('?')[0] ?? ''),
+          isLivePath(request.url?.split('?')[0] ?? ''),
       }),
       new ExpressInstrumentation(),
       new NestInstrumentation(),
@@ -122,6 +122,14 @@ export const LIVE_PATHS: ReadonlySet<string> = new Set([
   '/v1/me/events',
   '/v1/ops/events',
 ]);
+
+/** One tip's receipt stream (addendum §3.6): one path per tip, so a pattern rather than a set entry. */
+const TIP_EVENTS_PATH = /^\/v1\/tips\/[^/]+\/events$/;
+
+/** A live stream's path: the two fixed ones, or a receipt's `/v1/tips/:tipId/events`. */
+export function isLivePath(path: string): boolean {
+  return LIVE_PATHS.has(path) || TIP_EVENTS_PATH.test(path);
+}
 
 export function getMeter(name: string): Meter {
   return metrics.getMeter(name);

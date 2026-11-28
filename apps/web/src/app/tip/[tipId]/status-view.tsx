@@ -19,7 +19,9 @@ import { AvatarImage } from '@/components/avatar';
 import { hasAvatar } from '@/lib/avatar-source';
 import { BusinessNote } from './business-note';
 import { readPendingTip, statusTokenKey } from '@/lib/pending-tip';
-import { nextCheckDelay } from '@/lib/status-polling';
+import { startReceiptLoop } from '@/lib/receipt-loop';
+import { followTip } from '@/lib/tip-live';
+import type { LiveStatus } from '@/lib/live-client';
 import { forgetSupporterKeys } from '@/lib/supporter-keys';
 import { RecognitionChoice } from './recognition-choice';
 import { onReconnect } from '@/lib/connection';
@@ -67,6 +69,8 @@ export function StatusView({ pilotNotice }: { pilotNotice?: ReactNode }) {
   const online = useOnline();
   const [stopped, setStopped] = useState(false);
   const [round, setRound] = useState(0);
+  // How the receipt's stream is doing ('idle' without one): tests read it from data-live.
+  const [live, setLive] = useState<LiveStatus>('idle');
   const [celebration, setCelebration] = useState<string | null>(null);
   const [forgotten, setForgotten] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -117,49 +121,51 @@ export function StatusView({ pilotNotice }: { pilotNotice?: ReactNode }) {
 
   useEffect(() => {
     if (!token) return;
-    let cancelled = false;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const started = Date.now();
-    const poll = async (attempt: number) => {
-      timer = undefined;
-      const result = await tipStatus(tipId, token);
-      if (cancelled) return;
-      if (result.ok) {
-        setNoAnswer(false);
-        setResult({ kind: 'tip', view: result.data });
-        if (result.data.state === 'paid') celebrate(result.data);
-        if (FINAL.has(result.data.state)) return;
-      } else if (result.status === 404) {
-        setResult({ kind: 'not-found' });
-        return;
-      } else {
+    // One round of checks (src/lib/receipt-loop.ts): polling as before, or following the tip's
+    // stream when the API says live updates are on.
+    let active = true;
+    const loop = startReceiptLoop({
+      read: async () => {
+        const result = await tipStatus(tipId, token);
+        // Left the page meanwhile: show nothing (the loop has stopped and ignores this).
+        if (!active) return { kind: 'failed' };
+        if (result.ok) {
+          setNoAnswer(false);
+          setResult({ kind: 'tip', view: result.data });
+          if (result.data.state === 'paid') celebrate(result.data);
+          return {
+            kind: 'ok',
+            final: FINAL.has(result.data.state),
+            live: result.data.live === true,
+          };
+        }
+        if (result.status === 404) {
+          setResult({ kind: 'not-found' });
+          return { kind: 'not_found' };
+        }
         setNoAnswer(true);
-      }
-      const delay = nextCheckDelay(attempt, Date.now() - started);
-      if (delay === null) {
-        setStopped(true);
-        return;
-      }
-      next = attempt + 1;
-      timer = setTimeout(() => void poll(next), delay);
-    };
+        return { kind: 'failed' };
+      },
+      follow: ({ onChange, onStatus }) =>
+        followTip({ tipId, token, onChange, onStatus }),
+      setTimeout: (fn, ms) => window.setTimeout(fn, ms),
+      clearTimeout: (timer) => window.clearTimeout(timer as number),
+      now: () => Date.now(),
+      onLive: setLive,
+      onGiveUp: () => setStopped(true),
+    });
     // Back online: check at once instead of waiting out the timer.
-    let next = 0;
     let disarm = () => {};
     const arm = () => {
       disarm = onReconnect(window, () => {
         arm();
-        if (timer === undefined) return;
-        clearTimeout(timer);
-        timer = undefined;
-        void poll(next);
+        loop.reconnected();
       });
     };
     arm();
-    void poll(0);
     return () => {
-      cancelled = true;
-      clearTimeout(timer);
+      active = false;
+      loop.stop();
       disarm();
     };
     // celebrate only reads refs and storage; polling restarts on the token or "Check again".
@@ -272,6 +278,7 @@ export function StatusView({ pilotNotice }: { pilotNotice?: ReactNode }) {
   // often not announced. Only a payment the API reports as paid gets the moment, then the receipt.
   return (
     <Surface
+      data-live={live}
       material={paid ? 'canvas' : 'instrument'}
       className={
         paid

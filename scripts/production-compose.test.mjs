@@ -69,6 +69,8 @@ test(
       'TRACE_PROBE_TEST_DELAY_MS',
       // The live stream's heartbeat: tests shorten it; production keeps the 20 s default.
       'LIVE_HEARTBEAT_MS',
+      // A receipt stream's life: tests shorten it; production keeps the 15-minute default.
+      'LIVE_TIP_LIFETIME_MS',
       // The mock provider's secret: production never runs the mock provider.
       'MOCK_PROVIDER_WEBHOOK_SECRET',
       // A tunable with a code default (owner, 14 Nov 2026, #216: deploy settings are secrets and

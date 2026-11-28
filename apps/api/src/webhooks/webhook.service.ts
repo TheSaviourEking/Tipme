@@ -1,5 +1,5 @@
 import { Inject, Injectable, Optional } from '@nestjs/common';
-import type { MockWebhook } from '@tipme/contracts';
+import { proChanged, tipChanged, type MockWebhook } from '@tipme/contracts';
 import {
   bachsAccountReadiness,
   disputeAsReversal,
@@ -109,6 +109,19 @@ export class WebhookService {
   }
 
   /**
+   * After this call settled a Pro purchase (it left PENDING, COLLECTING or UNKNOWN, whatever the
+   * outcome): the buyer's open Settings re-read it (addendum §3.7). A business's purchase has no
+   * page. Called once confirmProCheckout has resolved, so after its commit; never awaited.
+   */
+  private signalPurchase(result: {
+    settled: boolean;
+    profileId: string | null;
+  }): void {
+    if (!result.settled || result.profileId === null) return;
+    void this.publishLive(proChanged(result.profileId));
+  }
+
+  /**
    * Paid Pro (ADR-0015): an event about a purchase on TipMe's own account. It is stored against the
    * purchase (once per partner event) and only triggers a read-back, which decides. A refund or
    * dispute is flagged to staff; a paid refund or a lost dispute ends that Pro month.
@@ -176,6 +189,7 @@ export class WebhookService {
       sealing: this.sealing,
       providerEventRowId: eventRowId,
     });
+    this.signalPurchase(result);
     this.signalPlan(result);
     return `pro_${result.outcome}`;
   }
@@ -195,19 +209,21 @@ export class WebhookService {
   }
 
   /**
-   * After a provider event moved a tip to "still being confirmed": its page's dashboards re-read.
-   * Called once recordProviderEvent has resolved, so outside its transaction. A paid or failed tip
-   * is signalled by the outbox relay instead.
+   * After a provider event moved a tip to "still being confirmed": its page's dashboards and its
+   * open receipt re-read. Called once recordProviderEvent has resolved, so outside its
+   * transaction. A paid or failed tip is signalled by the outbox relay instead.
    */
   private signalPending(result: EventResult): void {
     if (
-      result.outcome === 'applied' &&
-      result.tipStatus === 'PENDING_VERIFICATION'
+      result.outcome !== 'applied' ||
+      result.tipStatus !== 'PENDING_VERIFICATION'
     )
-      void this.publishLive({
-        to: { profile: result.profileId },
-        type: 'tips.changed',
-      });
+      return;
+    void this.publishLive({
+      to: { profile: result.profileId },
+      type: 'tips.changed',
+    });
+    void this.publishLive(tipChanged(result.tipId));
   }
 
   async apply(event: MockWebhook): Promise<string> {

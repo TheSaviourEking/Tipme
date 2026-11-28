@@ -62,6 +62,8 @@ export interface EventResult {
   attemptStatus: string;
   /** The tip's page, so a caller can signal it after the commit (additive). */
   profileId: string;
+  /** The tip, so a caller can signal its receipt after the commit (additive). */
+  tipId: string;
 }
 
 interface Locked {
@@ -227,6 +229,7 @@ export async function recordProviderEvent(
           tipStatus: state.tip.status,
           attemptStatus: state.attempt.status,
           profileId: state.tip.profileId,
+          tipId: state.tip.id,
         };
       }
 
@@ -244,6 +247,7 @@ export async function recordProviderEvent(
         tipStatus: after?.tip.status ?? state.tip.status,
         attemptStatus: after?.attempt.status ?? state.attempt.status,
         profileId: state.tip.profileId,
+        tipId: state.tip.id,
       };
     }),
   );

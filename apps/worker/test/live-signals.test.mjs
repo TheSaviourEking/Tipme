@@ -11,10 +11,14 @@ import { DOMAIN_EVENT_NAMES } from '../dist/handlers/domain-events.js';
 import { createWorkerLivePublisher } from '../dist/live-publisher.js';
 import {
   LIVE_SIGNAL_MAPPED_EVENTS,
+  announcementSignals,
   businessTipSignals,
+  expiredTipSignals,
   jobSignalsFor,
   liveSignalFor,
+  reconcileIssueSignals,
   requestGate,
+  signalProvidersAfter,
   whenRequestMoved,
 } from '../dist/live-signals.js';
 
@@ -23,9 +27,38 @@ const TIP = '55555555-5555-4555-8555-555555555555';
 
 test('tip.succeeded and tip.failed map to tips.changed for their profile', () => {
   for (const type of ['tip.succeeded', 'tip.failed'])
+    assert.deepEqual(
+      liveSignalFor(type, { tipId: TIP, profileId: PROFILE })[0],
+      { to: { profile: PROFILE }, type: 'tips.changed' },
+    );
+});
+
+test('a paid or failed tip also reaches its receipt', () => {
+  for (const type of ['tip.succeeded', 'tip.failed']) {
     assert.deepEqual(liveSignalFor(type, { tipId: TIP, profileId: PROFILE }), [
       { to: { profile: PROFILE }, type: 'tips.changed' },
+      { to: { tip: TIP }, type: 'tip.changed' },
     ]);
+    // Without a valid tip id, only the recipient's signal; without a profile, only the receipt's.
+    assert.deepEqual(
+      liveSignalFor(type, { tipId: 'nope', profileId: PROFILE }),
+      [{ to: { profile: PROFILE }, type: 'tips.changed' }],
+    );
+    assert.deepEqual(liveSignalFor(type, { tipId: TIP }), [
+      { to: { tip: TIP }, type: 'tip.changed' },
+    ]);
+  }
+});
+
+test('stale tips the expiry cancelled each signal their receipt', () => {
+  const other = '88888888-8888-4888-8888-888888888888';
+  assert.deepEqual(expiredTipSignals([TIP, other, 'junk']), [
+    { to: { tip: TIP }, type: 'tip.changed' },
+    { to: { tip: other }, type: 'tip.changed' },
+  ]);
+  assert.deepEqual(expiredTipSignals([]), []);
+  for (const message of expiredTipSignals([TIP]))
+    assert.notEqual(parseLiveMessage(JSON.stringify(message)), null);
 });
 
 test('every outbox event type the database writes has an explicit mapping, even if []', () => {
@@ -332,4 +365,92 @@ test('whenRequestMoved keeps the signals only when the request moved', async () 
     }),
     messages,
   );
+});
+
+test('staff changes re-check every staff stream', () => {
+  for (const name of [
+    'ops.staff_changed',
+    'ops.last_approver_removed',
+    // Any path that ended someone's admin grants (dropOpsAccess): reset, resend, removal, a move.
+    'ops.grants_ended',
+  ])
+    assert.deepEqual(
+      liveSignalFor(name, { action: 'role_changed', requestedBy: null }),
+      [{ to: { staff: 'any' }, type: 'staff.changed' }],
+      name,
+    );
+});
+
+test('approval events reach every staff stream', () => {
+  for (const name of [
+    'ops.approval_pending',
+    'ops.approval_ran',
+    'ops.approval_closed',
+  ])
+    assert.deepEqual(liveSignalFor(name, { requestId: TIP }), [
+      { to: { staff: 'any' }, type: 'ops.approvals.changed' },
+    ]);
+});
+
+test('an opened issue reaches issues staff', () => {
+  for (const name of DOMAIN_EVENT_NAMES)
+    assert.deepEqual(jobSignalsFor(name, 'issue_opened', { tipId: TIP }), [
+      { to: { staff: 'issues.view' }, type: 'ops.issues.changed' },
+    ]);
+  // Only an issue that opened counts: a duplicate or a logged event changed nothing.
+  for (const outcome of ['duplicate', 'logged', 'skipped'])
+    assert.deepEqual(jobSignalsFor('payment.unresolved', outcome, {}), []);
+});
+
+test('a reconcile that opened or resolved nothing signals nothing', () => {
+  assert.deepEqual(reconcileIssueSignals({ opened: 0, resolved: 0 }), []);
+  for (const counts of [
+    { opened: 1, resolved: 0 },
+    { opened: 0, resolved: 2 },
+  ])
+    assert.deepEqual(reconcileIssueSignals(counts), [
+      { to: { staff: 'issues.view' }, type: 'ops.issues.changed' },
+    ]);
+});
+
+test('a queued batch signals announcement staff; idle and paused do not', () => {
+  assert.deepEqual(announcementSignals('announcements_queued'), [
+    { to: { staff: 'announcements.send' }, type: 'ops.announcements.changed' },
+  ]);
+  for (const outcome of ['announcements_idle', 'announcements_paused'])
+    assert.deepEqual(announcementSignals(outcome), []);
+});
+
+const PROVIDERS = {
+  to: { staff: ['issues.view', 'providers.manage'] },
+  type: 'ops.providers.changed',
+};
+
+test('a mail health change signals providers staff after the alert', async () => {
+  const order = [];
+  const onChange = signalProvidersAfter(
+    async (event) => {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      order.push(`alert ${event.change}`);
+    },
+    async (messages) => void order.push(messages),
+  );
+  await onChange({ provider: 'zeptomail', change: 'tripped' });
+  assert.deepEqual(order, ['alert tripped', [PROVIDERS]]);
+});
+
+test('an alert that fails still signals, and the failure still reaches the breaker', async () => {
+  const published = [];
+  const onChange = signalProvidersAfter(
+    async () => {
+      throw new Error('webhook down');
+    },
+    async (messages) => void published.push(messages),
+  );
+  // The breaker logs a failed alert (mail.health_alert_failed): the rejection is passed on.
+  await assert.rejects(
+    onChange({ provider: 'zeptomail', change: 'recovered' }),
+    /webhook down/,
+  );
+  assert.deepEqual(published, [[PROVIDERS]]);
 });

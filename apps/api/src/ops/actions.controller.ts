@@ -11,6 +11,7 @@ import {
 } from '@nestjs/common';
 import type { Response } from 'express';
 import {
+  issuesChanged,
   opsNoteSchema,
   opsBachsAccountRecoverySchema,
   opsBachsCheckoutRecoverySchema,
@@ -184,6 +185,7 @@ export class OpsActionsController {
         ? { bankAndSignInChecked: body.bankAndSignInChecked }
         : {}),
     });
+    void this.publishLive(issuesChanged);
     return { data: { resolved: true, ...closed } };
   }
 

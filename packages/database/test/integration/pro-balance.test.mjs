@@ -301,8 +301,11 @@ test('partner timeout: UNKNOWN and still reserved; the read-back finds the trans
   assert.equal(await planOf(db), 'free');
   const first = await reconcile(db, fake, later(5 * MIN));
   assert.equal(first.paid.length, 1);
+  // Live updates (addendum §3.7): settled once, for the buyer's page (pro.changed).
+  assert.deepEqual(first.settled, [{ profileId: first.paid[0].profileId }]);
   assert.equal((await purchaseRow(db, bought.purchaseId)).status, 'PAID');
-  await reconcile(db, fake, later(10 * MIN));
+  const second = await reconcile(db, fake, later(10 * MIN));
+  assert.deepEqual(second.settled, []);
   // Never sent again: only the read-back was asked.
   assert.equal(fake.collects.length, 1);
   assert.equal((await proLedger(db)).length, 4);
@@ -316,10 +319,21 @@ test('partner timeout and no transfer found after 30 minutes: FAILED, released, 
   fake.next = 'lost_nothing';
   const bought = await buy(db, fake);
   assert.equal(bought.status, 'UNKNOWN');
-  await reconcile(db, fake, later(5 * MIN));
+  const waiting = await reconcile(db, fake, later(5 * MIN));
   assert.equal((await purchaseRow(db, bought.purchaseId)).status, 'UNKNOWN');
-  await reconcile(db, fake, later(40 * MIN));
-  await reconcile(db, fake, later(50 * MIN));
+  assert.deepEqual(waiting.settled, []);
+  const gaveUp = await reconcile(db, fake, later(40 * MIN));
+  // Failed by the read-back: one settle, for this page.
+  assert.equal(gaveUp.settled.length, 1);
+  assert.equal(
+    gaveUp.settled[0].profileId,
+    (
+      await q(db, `SELECT profile_id FROM pro_purchases WHERE id = $1`, [
+        bought.purchaseId,
+      ])
+    )[0].profile_id,
+  );
+  assert.deepEqual((await reconcile(db, fake, later(50 * MIN))).settled, []);
   assert.equal((await purchaseRow(db, bought.purchaseId)).status, 'FAILED');
   assert.equal(await available(db), 900000n);
   assert.equal(fake.collects.length, 1);

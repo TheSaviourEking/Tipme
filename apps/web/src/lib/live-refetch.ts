@@ -1,4 +1,16 @@
-import type { LiveEventType } from '@tipme/contracts';
+import { LIVE_BACKGROUND_HEADER, type LiveEventType } from '@tipme/contracts';
+import { WITHDRAWALS_SPREAD_MS } from './live-timing.ts';
+
+/**
+ * Every read the scheduler runs was started by the stream (a signal, a resync, the fallback poll),
+ * not by the person. Each refetch is handed this, to pass to its staff reads: OpsGuard then does
+ * not count them as activity, so an open, unused admin tab still loses its grant after the idle
+ * hour (final review I1). Recipient reads may ignore it.
+ */
+export const BACKGROUND_READ = {
+  headers: { [LIVE_BACKGROUND_HEADER]: '1' },
+} as const;
+export type LiveRead = typeof BACKGROUND_READ;
 
 /**
  * Debounced, single-flight refetches for live signals (spec §6.1). Pure, with injected timers.
@@ -11,7 +23,7 @@ export interface RefetchScheduler {
   /** `resync: false`: only its signals run it (a "New tips" button, not a re-read). */
   register(
     types: readonly LiveEventType[],
-    refetch: () => Promise<void>,
+    refetch: (read: LiveRead) => Promise<void>,
     options?: { resync?: boolean },
   ): () => void;
   /** Debounced per registration. */
@@ -26,7 +38,7 @@ export interface RefetchScheduler {
 interface Registration {
   types: ReadonlySet<string>;
   resync: boolean;
-  refetch: () => Promise<void>;
+  refetch: (read: LiveRead) => Promise<void>;
   timer: unknown;
   running: boolean;
   again: boolean;
@@ -50,7 +62,7 @@ export function createRefetchScheduler(o: {
     }
     r.running = true;
     void r
-      .refetch()
+      .refetch(BACKGROUND_READ)
       .catch(() => undefined)
       .finally(() => {
         r.running = false;
@@ -99,9 +111,6 @@ export function createRefetchScheduler(o: {
     },
   };
 }
-
-/** The most a `withdrawals.changed` refetch waits when nothing of this person's is in flight. */
-export const WITHDRAWALS_SPREAD_MS = 10_000;
 
 /**
  * `withdrawals.changed` also comes as a broadcast (the TipMe-wide switch), and the browser never

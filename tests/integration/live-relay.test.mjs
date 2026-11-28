@@ -35,7 +35,7 @@ async function addTipEvent() {
       payload: { tipId, profileId },
     }),
   );
-  return { profileId, dedupeKey: `tip.succeeded.${tipId}` };
+  return { profileId, tipId, dedupeKey: `tip.succeeded.${tipId}` };
 }
 
 const publishedAt = async (dedupeKey) =>
@@ -84,7 +84,7 @@ test('relay publishes nothing when queue.add fails (the claim rolls back)', asyn
 
 test('a publish that rejects is swallowed and the relay still marks its rows relayed', async () => {
   await database.reset();
-  const { profileId, dedupeKey } = await addTipEvent();
+  const { profileId, tipId, dedupeKey } = await addTipEvent();
   const added = [];
   const calls = [];
   const relay = startOutboxRelay({
@@ -107,8 +107,10 @@ test('a publish that rejects is swallowed and the relay still marks its rows rel
     await relay.stop();
   }
   assert.deepEqual(added, ['tip.succeeded']);
+  // The recipient's dashboards, and the tip's own receipt (addendum §3.6).
   assert.deepEqual(calls[0], [
     { to: { profile: profileId }, type: 'tips.changed' },
+    { to: { tip: tipId }, type: 'tip.changed' },
   ]);
   // Marked once, and not claimed again because a publish failed.
   await sleep(100);

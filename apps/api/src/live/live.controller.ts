@@ -8,10 +8,15 @@ import {
   SetMetadata,
   UseGuards,
 } from '@nestjs/common';
-import { myProfileId, OperationError, resolveSession } from '@tipme/database';
+import {
+  myProfileId,
+  OperationError,
+  resolveOpsGrant,
+  resolveSession,
+} from '@tipme/database';
 import type { Logger } from '@tipme/observability';
 import type { Request, Response } from 'express';
-import { readCookie, SESSION_COOKIE } from '../auth/cookies.js';
+import { OPS_COOKIE, readCookie, SESSION_COOKIE } from '../auth/cookies.js';
 import {
   CurrentUser,
   SessionGuard,
@@ -26,6 +31,8 @@ import { API_CONFIG, type ApiConfig } from '../config.js';
 import { CodedHttpException } from '../http/coded.exception.js';
 import { DatabaseProvider } from '../infra/database.js';
 import { EventStreamResponse } from '../openapi/event-stream.js';
+import { CurrentOps, type OpsContext } from '../ops/ops.guard.js';
+import { OpsStream } from '../ops/permission.decorator.js';
 import { LOGGER } from '../tokens.js';
 import { LiveHubService } from './live-hub.service.js';
 import type { LiveMetrics } from './live-metrics.js';
@@ -56,7 +63,17 @@ export function clientGone(res: Response): boolean {
   return res.destroyed || res.writableEnded;
 }
 
-/** Shared by /v1/me/events and (later) /v1/ops/events. */
+/** An open stream, for a route that ends it itself (the receipt's, on a final tip). */
+export interface OpenStream {
+  /** Writes an already-framed SSE block while the stream is open. */
+  write(frame: string): void;
+  close(reason: LiveCloseReason): void;
+}
+
+/**
+ * Shared by /v1/me/events, /v1/ops/events and /v1/tips/:tipId/events. Returns the stream's handle,
+ * or null when the client left first; throws the refusal (429, 503) when the hub has no place.
+ */
 export function openStream(o: {
   req: Request;
   res: Response;
@@ -69,7 +86,9 @@ export function openStream(o: {
   lifetimeMs?: number;
   /** 20 s. */
   heartbeatMs?: number;
-}): void {
+  /** After every close, whatever its reason (client, lifetime, drain, error, the route's own). */
+  onClose?: (reason: LiveCloseReason) => void;
+}): OpenStream | null {
   const { req, res, hub } = o;
   // Counted here, so the gate in front (live-gate.middleware.ts) doesn't count it again.
   const metrics = {
@@ -83,7 +102,7 @@ export function openStream(o: {
   // fired, and writes to it raise nothing: registering would hold a slot for half an hour.
   if (clientGone(res)) {
     metrics.connect('client_gone');
-    return;
+    return null;
   }
   let open = true;
   // Started only once the stream is registered; cleared by whichever close comes first.
@@ -98,6 +117,7 @@ export function openStream(o: {
     hub.unregister(id);
     metrics.close(reason);
     res.end();
+    o.onClose?.(reason);
   };
   const sink: LiveSink = {
     ...o.sink,
@@ -155,7 +175,39 @@ export function openStream(o: {
   // The response's close fires however the connection ends (the request's may have passed).
   res.on('close', () => finish('client'));
   res.on('error', () => finish('error'));
+  return { write: sink.write, close: finish };
 }
+
+/** The hub's metrics, marking the response as counted so the gate doesn't count it again. */
+export function countedMetrics(
+  hub: LiveHubService,
+  res: Response,
+): LiveMetrics {
+  return {
+    ...hub.metrics,
+    connect: (outcome: Parameters<LiveMetrics['connect']>[0]) => {
+      res.locals['liveCounted'] = true;
+      hub.metrics.connect(outcome);
+    },
+  };
+}
+
+/** The per-person connect limit, counted as rate_limited when it refuses. */
+async function personLimit(
+  limits: RateLimitGuard,
+  metrics: LiveMetrics,
+  userId: string,
+): Promise<void> {
+  try {
+    await limits.consumeForPerson('live_connect_user', userId);
+  } catch (error) {
+    if (error instanceof RateLimitedException) metrics.connect('rate_limited');
+    throw error;
+  }
+}
+
+const sameSet = (a: ReadonlySet<string>, b: ReadonlySet<string>): boolean =>
+  a.size === b.size && [...a].every((one) => b.has(one));
 
 /** The recipient's signal stream (spec §2.1): types only, never data. */
 @Controller('v1/me')
@@ -185,26 +237,14 @@ export class LiveController {
     @Res() res: Response,
     @CurrentUser() auth: AuthContext,
   ): Promise<void> {
-    const metrics = {
-      ...this.hub.metrics,
-      connect: (outcome: Parameters<LiveMetrics['connect']>[0]) => {
-        res.locals['liveCounted'] = true;
-        this.hub.metrics.connect(outcome);
-      },
-    };
+    const metrics = countedMetrics(this.hub, res);
     // The gate answers 204 first while live updates are off; this stays as a second line.
     if (!this.config.LIVE_UPDATES_ENABLED) {
       metrics.connect('disabled');
       res.status(204).end();
       return;
     }
-    try {
-      await this.limits.consumeForPerson('live_connect_user', auth.userId);
-    } catch (error) {
-      if (error instanceof RateLimitedException)
-        metrics.connect('rate_limited');
-      throw error;
-    }
+    await personLimit(this.limits, metrics, auth.userId);
     // After each await: a client that left needs no database read.
     if (clientGone(res)) {
       metrics.connect('client_gone');
@@ -235,9 +275,97 @@ export class LiveController {
         userId,
         profileId,
         permissions: null,
+        tipId: null,
         recheck: async () => {
           const session = await resolveSession(db, token, new Date());
           return session?.userId === userId;
+        },
+      },
+    });
+  }
+}
+
+/**
+ * The staff signal stream (base design §4.2, addendum §3.1): types only, and only those the grant's
+ * permissions allow. No grant gets OpsGuard's 404, as on every admin route.
+ */
+@Controller('v1/ops')
+export class OpsLiveController {
+  constructor(
+    @Inject(API_CONFIG) private readonly config: ApiConfig,
+    @Inject(DatabaseProvider) private readonly database: DatabaseProvider,
+    @Inject(LiveHubService) private readonly hub: LiveHubService,
+    @Inject(RateLimitGuard) private readonly limits: RateLimitGuard,
+    @Inject(LOGGER) private readonly logger: Logger,
+  ) {}
+
+  @Get('events')
+  @EventStreamResponse({
+    description:
+      'A text/event-stream of change signals for signed-in staff with a live admin grant: ' +
+      '`retry: 5000`, then `data: {"type":"ready"}`, then `data: {"type":"<signal>"}` lines and a ' +
+      "heartbeat (a `: hb` comment and an `hb` event) every 20 s. Only the signals the grant's " +
+      'permissions allow; signals carry only a type, never data. Connecting does not count as ' +
+      "activity on the grant, and the stream ends at the grant's expiry or idle deadline, or with " +
+      '`session.ended` when the grant ends or its permissions change. 204 while live updates are ' +
+      'off. 404 without a live grant. 429 LIVE_LIMIT past 8 streams for one person; 503 ' +
+      'LIVE_UNAVAILABLE (Retry-After: 30) when this copy is full or stopping.',
+  })
+  @OpsStream()
+  // Below OpsStream (decorators apply bottom-up): the address limit runs before CsrfGuard and
+  // OpsGuard, so grant-less connects count too and never reach Postgres past the limit.
+  @SetMetadata(RATE_LIMIT_ROUTE, 'live_connect')
+  @UseGuards(RateLimitGuard)
+  async ops(
+    @Req() req: Request,
+    @Res() res: Response,
+    @CurrentUser() auth: AuthContext,
+    @CurrentOps() ops: OpsContext,
+  ): Promise<void> {
+    const metrics = countedMetrics(this.hub, res);
+    if (!this.config.LIVE_UPDATES_ENABLED) {
+      metrics.connect('disabled');
+      res.status(204).end();
+      return;
+    }
+    await personLimit(this.limits, metrics, ops.userId);
+    if (clientGone(res)) {
+      metrics.connect('client_gone');
+      return;
+    }
+    const db = this.database.db;
+    // Kept in this closure only, to re-check this stream's own grant; never logged.
+    const token = readCookie(req, OPS_COOKIE) ?? '';
+    const { userId, sessionId } = ops;
+    const permissions: ReadonlySet<string> = new Set(ops.permissions);
+    const ends = [ops.expiresAt, ops.idleDeadline, auth.expiresAt].filter(
+      (d): d is Date => d instanceof Date,
+    );
+    openStream({
+      req,
+      res,
+      hub: this.hub,
+      metrics,
+      logger: this.logger,
+      expiresAt: new Date(Math.min(...ends.map((d) => d.getTime()))),
+      heartbeatMs: this.config.LIVE_HEARTBEAT_MS,
+      sink: {
+        kind: 'ops',
+        userId,
+        profileId: null,
+        permissions,
+        tipId: null,
+        // Gone, someone else's, or a different permission set: closed, so the reconnect reads the
+        // new set. A read, never activity.
+        recheck: async () => {
+          const grant = await resolveOpsGrant(db, {
+            token,
+            sessionId,
+            touch: false,
+          });
+          return (
+            grant?.userId === userId && sameSet(grant.permissions, permissions)
+          );
         },
       },
     });

@@ -7,7 +7,9 @@ import {
   WITHDRAWAL_FREEZE_OPENED_EVENT,
   WITHDRAWALS_SWITCH_EVENT,
   liveChannel,
+  proChanged,
   traceCarrierSchema,
+  type LiveMessage,
 } from '@tipme/contracts';
 import {
   createErrorReporter,
@@ -127,8 +129,12 @@ import { mailHealthAlerter } from './handlers/mail-failover.js';
 import { startOutboxRelay } from './outbox-relay-loop.js';
 import { createWorkerLivePublisher } from './live-publisher.js';
 import {
+  announcementSignals,
+  expiredTipSignals,
   jobSignalsFor,
+  reconcileIssueSignals,
   requestGate,
+  signalProvidersAfter,
   whenRequestMoved,
   PAYOUT_SETUP_JOB_NAME,
   WEEKLY_REPORTS_JOB_NAME,
@@ -348,6 +354,23 @@ export interface ProCollectionPaid {
   planChanged: boolean;
 }
 
+/** A purchase a read-back moved out of the open states, whatever the outcome (`pro.changed`). */
+export interface ProPurchaseSettled {
+  profileId: string | null;
+}
+
+/**
+ * One `pro.changed` per settled purchase, to the buyer's page (addendum §3.7). A business's
+ * purchase (Business Pro) has no page, so no Settings slip follows it (ruling L-R15).
+ */
+export function proSettledSignals(
+  settled: readonly ProPurchaseSettled[],
+): LiveMessage[] {
+  return settled.flatMap((s) =>
+    s.profileId === null ? [] : [proChanged(s.profileId)],
+  );
+}
+
 /**
  * The read-back for Pro paid from the balance (plan Task 8), for every adapter the worker holds,
  * each under the name its rows record. Its own loop: a balance payment can go through any provider
@@ -359,18 +382,31 @@ export async function readBackProCollections<A>(
   readBack: (
     providerName: string,
     provider: A,
-  ) => Promise<{ checked: number; failed: number; paid: ProCollectionPaid[] }>,
-): Promise<{ checked: number; failed: number; paid: ProCollectionPaid[] }> {
+  ) => Promise<{
+    checked: number;
+    failed: number;
+    paid: ProCollectionPaid[];
+    // Required: an adapter that stopped returning it would stop pro.changed with no type error.
+    settled: ProPurchaseSettled[];
+  }>,
+): Promise<{
+  checked: number;
+  failed: number;
+  paid: ProCollectionPaid[];
+  settled: ProPurchaseSettled[];
+}> {
   const totals = {
     checked: 0,
     failed: 0,
     paid: [] as ProCollectionPaid[],
+    settled: [] as ProPurchaseSettled[],
   };
   for (const [providerName, provider] of providers) {
     const result = await readBack(providerName, provider);
     totals.checked += result.checked;
     totals.failed += result.failed;
     totals.paid.push(...result.paid);
+    totals.settled.push(...result.settled);
   }
   return totals;
 }
@@ -605,8 +641,16 @@ export async function startJobWorker(
   const providerForExpiry = (name: string | null) =>
     name ? providerFor(name) : defaultProvider;
   const parkedProviders = parkedPayoutProviders(paymentProviders);
-  /** A page whose plan changed: refresh it and tell open screens. */
-  const announce = (pages: readonly ProCollectionPaid[]) => {
+  /**
+   * After a read-back's commits: each settled purchase's open Settings re-read it (`pro.changed`,
+   * addendum §3.7), and a page whose plan changed is refreshed and told (`profile.changed`).
+   */
+  const announce = (
+    pages: readonly ProCollectionPaid[],
+    settled: readonly ProPurchaseSettled[],
+  ) => {
+    const buyers = proSettledSignals(settled);
+    if (buyers.length > 0) void publishLive(buyers);
     for (const page of pages.filter((p) => p.planChanged)) {
       // A business's month (Business Pro) changes no page; its signals come with Phase B.
       if (page.profileId === null) continue;
@@ -657,7 +701,7 @@ export async function startJobWorker(
         now,
       });
       totals.failed += refunds.failed;
-      announce(result.paid);
+      announce(result.paid, result.settled);
     }
     // Pro paid from the balance (plan Task 8): read back at every adapter, never re-sent.
     const collected = await readBackProCollections(
@@ -674,7 +718,7 @@ export async function startJobWorker(
     totals.checked += collected.checked;
     totals.paid += collected.paid.length;
     totals.failed += collected.failed;
-    announce(collected.paid);
+    announce(collected.paid, collected.settled);
     return totals;
   };
   const schedule = ensureSchedule({
@@ -914,9 +958,18 @@ export async function startJobWorker(
               provider: providerForExpiry,
               now,
             });
+            // Each cancelled tip's open receipt re-reads (after the commit; not awaited).
+            void publishLive(expiredTipSignals(expiry.expiredTipIds));
             // Then the admin inbox: open issues for what still needs a person, close cleared ones.
             const detected = await runIssueDetectors(database.db, now);
             const cleared = await autoResolveIssues(database.db, now);
+            // Staff with issues.view re-read their inbox; not awaited, a lost signal waits for a refresh.
+            void publishLive(
+              reconcileIssueSignals({
+                opened: detected.opened,
+                resolved: cleared.resolved,
+              }),
+            );
             logger.info({
               event: 'reconcile.completed',
               issues_opened: detected.opened,
@@ -1020,6 +1073,7 @@ export async function startJobWorker(
               log: (entry) => logger.info({ ...entry, ...fields }),
             });
             processed.add(1, { outcome });
+            void publishLive(announcementSignals(outcome));
             return outcome;
           }
           if (job.name === PRO_EXPIRE_JOB) {
@@ -1501,12 +1555,15 @@ export async function startJobWorker(
       prefix: config.QUEUE_PREFIX,
     }),
     settings: healthSettings,
-    onChange: mailHealthAlerter({
-      url: config.ALERT_WEBHOOK_URL,
-      labels: MAIL_PROVIDER_LABELS,
-      group: failoverGroup,
-      log: (entry) => logger.warn(entry),
-    }),
+    onChange: signalProvidersAfter(
+      mailHealthAlerter({
+        url: config.ALERT_WEBHOOK_URL,
+        labels: MAIL_PROVIDER_LABELS,
+        group: failoverGroup,
+        log: (entry) => logger.warn(entry),
+      }),
+      publishLive,
+    ),
     log: (entry) => logger.warn(entry),
   });
   // Whether staff fixed the provider in ops, read at most every 5 seconds like the active one.

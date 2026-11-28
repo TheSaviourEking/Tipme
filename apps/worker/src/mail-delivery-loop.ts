@@ -6,7 +6,11 @@ import {
   wipeExpiredMailContent,
   type MailDeliveryDeps,
 } from '@tipme/database';
-import { sessionsChanged, type LiveMessage } from '@tipme/contracts';
+import {
+  opsProvidersChanged,
+  sessionsChanged,
+  type LiveMessage,
+} from '@tipme/contracts';
 import type { Logger } from '@tipme/observability';
 
 import { databaseFailureFields } from './job-retry.js';
@@ -26,11 +30,14 @@ export interface MailDelivery {
  * pass is logged by name and tried again next tick; mail waits safely in Postgres.
  */
 export function startMailDelivery(options: {
-  deps: Omit<MailDeliveryDeps, 'log' | 'warn'>;
+  deps: Omit<MailDeliveryDeps, 'log' | 'warn' | 'onProviderTestSettled'>;
   logger: Logger;
   intervalMs?: number;
   limit?: number;
-  /** A finished email recovery ended the account's sessions: close their live streams. */
+  /**
+   * A finished email recovery ended the account's sessions: close their live streams. A test email
+   * sent or failed: the Providers page reads again.
+   */
   publishLive?: (messages: LiveMessage[]) => Promise<void>;
   /** Automatic failover's unused-codes check (checkCodeDelivery), when a fallback is set up. */
   checkCodes?: (now: Date) => Promise<void>;
@@ -75,6 +82,9 @@ export function startMailDelivery(options: {
           ...deps,
           log: (entry) => logger.info(entry),
           warn: (entry) => logger.warn(entry),
+          // After the test email's row is written; never awaited, never failing the pass.
+          onProviderTestSettled: () =>
+            void options.publishLive?.([opsProvidersChanged]),
         },
         { now, limit },
       );

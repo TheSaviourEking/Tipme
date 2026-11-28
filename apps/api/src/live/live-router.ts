@@ -12,15 +12,25 @@ import {
  */
 
 export type LiveCloseReason =
-  'client' | 'lifetime' | 'session_ended' | 'draining' | 'error';
+  | 'client'
+  | 'lifetime'
+  | 'session_ended'
+  | 'draining'
+  | 'error'
+  /** A receipt's tip became final while its stream was open. */
+  | 'final';
 
 export interface LiveSink {
   id: string;
-  kind: 'me' | 'ops';
+  /** `tip`: a public receipt's stream, authorised by the tip's status token, not a session. */
+  kind: 'me' | 'ops' | 'tip';
+  /** `tip:<tipId>` for a receipt's stream: never a real user id, so no user signal can reach it. */
   userId: string;
   profileId: string | null;
   /** Ops streams only. */
   permissions: ReadonlySet<string> | null;
+  /** Tip streams only: the tip id its status token was verified for. */
+  tipId: string | null;
   /** Already-framed SSE text. */
   write(frame: string): void;
   close(reason: LiveCloseReason): void;
@@ -34,6 +44,9 @@ export type RegisterResult =
 
 export interface LiveRouterOptions {
   maxPerUser: number;
+  /** Open receipt streams per tip on this copy (refused as limit_user beyond it). */
+  maxPerTip: number;
+  /** Every stream on this copy, tip streams included. */
   maxStreams: number;
   coalesceMs: number;
   random: () => number;
@@ -52,7 +65,13 @@ export interface LiveRouter {
   /** A jittered retry, then close every stream; refuse new ones from now on. */
   drain(): void;
   readonly draining: boolean;
-  counts(): { me: number; ops: number };
+  counts(): LiveStreamCounts;
+}
+
+export interface LiveStreamCounts {
+  me: number;
+  ops: number;
+  tip: number;
 }
 
 export const sseFrame = (m: LiveBrowserMessage): string =>
@@ -73,9 +92,11 @@ export function createLiveRouter(o: LiveRouterOptions): LiveRouter {
   const byUser = new Map<string, Set<LiveSink>>();
   const byProfile = new Map<string, Set<LiveSink>>();
   const ops = new Set<LiveSink>();
+  const byTip = new Map<string, Set<LiveSink>>();
   const windows = new Map<string, Window>();
   let draining = false;
   let meCount = 0;
+  let tipCount = 0;
 
   const add = (map: Map<string, Set<LiveSink>>, key: string, s: LiveSink) => {
     let set = map.get(key);
@@ -100,7 +121,10 @@ export function createLiveRouter(o: LiveRouterOptions): LiveRouter {
     remove(byUser, s.userId, s);
     if (s.profileId) remove(byProfile, s.profileId, s);
     if (s.kind === 'ops') ops.delete(s);
-    else meCount -= 1;
+    else if (s.kind === 'tip') {
+      if (s.tipId) remove(byTip, s.tipId, s);
+      tipCount -= 1;
+    } else meCount -= 1;
     const w = windows.get(id);
     if (w) {
       o.clearTimer(w.timer);
@@ -159,8 +183,17 @@ export function createLiveRouter(o: LiveRouterOptions): LiveRouter {
     }
   }
 
+  /*
+   * Isolation (addendum §3.6): a tip stream is reached only through `{ tip }`, by the id its token
+   * was verified for, and `{ tip }` reaches nothing else. User, profile and broadcast targets keep
+   * to `me` streams; staff targets to `ops` streams.
+   */
   function targets(message: LiveMessage): LiveSink[] {
     const to = message.to;
+    if ('tip' in to)
+      return message.type === 'tip.changed'
+        ? [...(byTip.get(to.tip) ?? [])].filter((s) => s.kind === 'tip')
+        : [];
     if ('user' in to)
       return [...(byUser.get(to.user) ?? [])].filter((s) => s.kind === 'me');
     if ('profile' in to)
@@ -168,8 +201,14 @@ export function createLiveRouter(o: LiveRouterOptions): LiveRouter {
         (s) => s.kind === 'me',
       );
     if ('all' in to) return [...byId.values()].filter((s) => s.kind === 'me');
-    if (to.staff === 'any') return [...ops];
-    return [...ops].filter((s) => s.permissions?.has(to.staff) === true);
+    const staff = to.staff;
+    if (staff === 'any') return [...ops];
+    // One permission, or a list of which any one is enough.
+    const needed: readonly string[] =
+      typeof staff === 'string' ? [staff] : staff;
+    return [...ops].filter((s) =>
+      needed.some((p) => s.permissions?.has(p) === true),
+    );
   }
 
   return {
@@ -177,13 +216,20 @@ export function createLiveRouter(o: LiveRouterOptions): LiveRouter {
       if (draining) return { ok: false, reason: 'draining' };
       if (byId.size >= o.maxStreams)
         return { ok: false, reason: 'limit_process' };
-      if ((byUser.get(s.userId)?.size ?? 0) >= o.maxPerUser)
-        return { ok: false, reason: 'limit_user' };
+      // A tip stream counts per tip; it never has a person, so the per-person limit is not its own.
+      const full =
+        s.kind === 'tip'
+          ? !s.tipId || (byTip.get(s.tipId)?.size ?? 0) >= o.maxPerTip
+          : (byUser.get(s.userId)?.size ?? 0) >= o.maxPerUser;
+      if (full) return { ok: false, reason: 'limit_user' };
       byId.set(s.id, s);
       add(byUser, s.userId, s);
       if (s.profileId) add(byProfile, s.profileId, s);
       if (s.kind === 'ops') ops.add(s);
-      else meCount += 1;
+      else if (s.kind === 'tip' && s.tipId) {
+        add(byTip, s.tipId, s);
+        tipCount += 1;
+      } else meCount += 1;
       return { ok: true };
     },
     unregister(id) {
@@ -225,7 +271,7 @@ export function createLiveRouter(o: LiveRouterOptions): LiveRouter {
       return draining;
     },
     counts() {
-      return { me: meCount, ops: ops.size };
+      return { me: meCount, ops: ops.size, tip: tipCount };
     },
   };
 }

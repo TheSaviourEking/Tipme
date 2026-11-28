@@ -160,24 +160,35 @@ export function confirmEnrolmentAndOpenGrant(
   );
 }
 
-/** The staff member behind a live grant on this recipient session, or null. Use slides the idle hour. */
+/**
+ * The staff member behind a live grant on this recipient session, or null. Use slides the idle hour,
+ * unless `touch` is false: a live stream's connect and re-checks read the grant without counting as
+ * activity, or an open tab would keep an idle grant alive (live updates addendum §3.1).
+ */
 export function resolveOpsGrant(
   db: Database,
-  input: { token: string; sessionId: string; now?: Date },
+  input: { token: string; sessionId: string; now?: Date; touch?: boolean },
 ): Promise<{
   userId: string;
   grantId: string;
   permissions: Set<string>;
   lastTotpAt: Date | null;
+  /** The grant's absolute end. */
+  expiresAt: Date;
+  /** When it ends if nothing uses it: last use plus the idle hour. */
+  idleDeadline: Date;
 } | null> {
   if (!/^[A-Za-z0-9_-]{43}$/.test(input.token)) return Promise.resolve(null);
   const now = input.now ?? new Date();
+  const touch = input.touch ?? true;
   return guarded(async () => {
     const [row] = await db
       .select({
         id: opsSessions.id,
         userId: opsSessions.userId,
         lastTotpAt: opsSessions.lastTotpAt,
+        expiresAt: opsSessions.expiresAt,
+        lastSeenAt: opsSessions.lastSeenAt,
       })
       .from(opsSessions)
       .innerJoin(sessions, eq(sessions.id, opsSessions.sessionId))
@@ -198,15 +209,19 @@ export function resolveOpsGrant(
     if (!row) return null;
     const permissions = await staffPermissions(db, row.userId);
     if (!permissions) return null;
-    await db
-      .update(opsSessions)
-      .set({ lastSeenAt: now })
-      .where(eq(opsSessions.id, row.id));
+    if (touch)
+      await db
+        .update(opsSessions)
+        .set({ lastSeenAt: now })
+        .where(eq(opsSessions.id, row.id));
+    const lastSeenAt = touch ? now : row.lastSeenAt;
     return {
       userId: row.userId,
       grantId: row.id,
       permissions,
       lastTotpAt: row.lastTotpAt,
+      expiresAt: row.expiresAt,
+      idleDeadline: new Date(lastSeenAt.getTime() + OPS_GRANT_IDLE_MS),
     };
   });
 }

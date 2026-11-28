@@ -307,17 +307,20 @@ async function settleCollection(
   );
 }
 
-/** A collect that definitely moved nothing: FAILED, which releases the reservation. */
+/**
+ * A collect that definitely moved nothing: FAILED, which releases the reservation. Null when it
+ * had already closed; else the page whose purchase this call failed.
+ */
 async function failCollection(
   db: Database,
   purchaseId: string,
   now: Date,
   alert: boolean,
-): Promise<void> {
-  await guarded(() =>
+): Promise<{ profileId: string | null } | null> {
+  return guarded(() =>
     db.transaction(async (tx) => {
       const row = await lockPurchase(tx, purchaseId);
-      if (row.status !== 'COLLECTING' && row.status !== 'UNKNOWN') return;
+      if (row.status !== 'COLLECTING' && row.status !== 'UNKNOWN') return null;
       await move(tx, row, 'FAILED', { now, cause: 'system' });
       if (alert)
         await enqueueOutbox(tx, {
@@ -325,6 +328,7 @@ async function failCollection(
           aggregateId: row.id,
           payload: { purchaseId: row.id, profileId: row.profileId },
         });
+      return { profileId: row.profileId };
     }),
   );
 }
@@ -531,6 +535,8 @@ export async function reconcileProCollections(
     handleLower: string | null;
     planChanged: boolean;
   }[];
+  /** Each purchase this run moved out of the open states, whatever the outcome (`pro.changed`). */
+  settled: { profileId: string | null }[];
   checked: number;
   failed: number;
 }> {
@@ -541,7 +547,8 @@ export async function reconcileProCollections(
     handleLower: string | null;
     planChanged: boolean;
   }[] = [];
-  if (!find) return { paid, checked: 0, failed: 0 };
+  const settled: { profileId: string | null }[] = [];
+  if (!find) return { paid, settled, checked: 0, failed: 0 };
   const before = new Date(now.getTime() - (input.minAgeMs ?? STALE_AFTER_MS));
   const rows = await db
     .select()
@@ -577,13 +584,17 @@ export async function reconcileProCollections(
           now,
         });
         if (result.outcome === 'paid') paid.push(result);
+        // Every outcome but `already` moved it out of COLLECTING or UNKNOWN.
+        if (result.outcome !== 'already')
+          settled.push({ profileId: result.profileId });
         continue;
       }
       if (
         !found &&
         now.getTime() - row.createdAt.getTime() >= GIVE_UP_AFTER_MS
       ) {
-        await failCollection(db, row.id, now, true);
+        const ended = await failCollection(db, row.id, now, true);
+        if (ended) settled.push(ended);
         continue;
       }
       await markCollect(
@@ -598,5 +609,5 @@ export async function reconcileProCollections(
       failed += 1;
     }
   }
-  return { paid, checked: rows.length, failed };
+  return { paid, settled, checked: rows.length, failed };
 }

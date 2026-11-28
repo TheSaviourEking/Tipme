@@ -14,7 +14,8 @@ failed beside other tests.
 - **Hold network answers to avoid timer races.** When a test needs an in-between state (busy, retrying, a
   toast that times out), `page.route` the request and answer it when the test is ready, rather than
   hoping a timer hasn't fired yet.
-- **Live updates.** Any test routing `**/v1/me/**` must answer `/v1/me/events` with 204.
+- **Live updates.** Any test routing `**/v1/me/**` must answer `/v1/me/events` with 204, and any test
+  routing `**/v1/ops/**` must answer `/v1/ops/events` with 204.
 - **Measure layout with `document.documentElement.clientWidth`, never `innerWidth`.** Linux Chromium
   has a scrollbar gutter that `innerWidth` includes and a Mac doesn't, so an `innerWidth` check passes on a
   Mac and fails in CI.

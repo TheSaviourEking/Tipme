@@ -9,3 +9,13 @@ export function liveProviderEnabled(o: {
 }): boolean {
   return o.profile !== null && o.liveUpdates;
 }
+
+/**
+ * Whether the ops shell opens the staff stream: only once access is granted and GET /v1/ops/me
+ * said live updates are on. Off, the admin area makes exactly the requests it made before.
+ */
+export function opsLiveEnabled(
+  access: { liveUpdates: boolean } | null,
+): boolean {
+  return access !== null && access.liveUpdates;
+}

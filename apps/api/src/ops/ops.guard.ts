@@ -6,6 +6,7 @@ import {
   type ExecutionContext,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
+import { LIVE_BACKGROUND_HEADER } from '@tipme/contracts';
 import {
   isActiveStaff,
   resolveOpsGrant,
@@ -23,12 +24,17 @@ export interface OpsContext {
   grantId: string;
   permissions: Set<string>;
   lastTotpAt: Date | null;
+  /** The grant's absolute end, and when it ends unused (last use + the idle hour). */
+  expiresAt: Date;
+  idleDeadline: Date;
 }
 export type OpsRequest = Request & { auth?: AuthContext; ops?: OpsContext };
 
 export const OPS_PERMISSION = 'tipme:ops-permission';
 /** No permission fits the route: the operation behind it decides, per record. */
 export const OPS_ANY_STAFF = 'tipme:ops-any-staff';
+/** Reads the grant without counting as activity: the live stream (an open tab is not use). */
+export const OPS_NO_TOUCH = 'tipme:ops-no-touch';
 
 /**
  * A named permission is always checked. Any-staff only counts where none is named, and a route marked
@@ -44,6 +50,22 @@ export function routeAllows(
   return typeof permission === 'string'
     ? held.has(permission)
     : permission.some((one) => held.has(one));
+}
+
+/**
+ * Whether this request moves the grant's idle clock (`lastSeenAt`). Not the live stream's route,
+ * and not a GET a stream started (`LIVE_BACKGROUND_HEADER: 1`): an open tab is not use. Any write,
+ * marked or not, is the person acting and always counts.
+ */
+export function touchesIdleClock(request: {
+  noTouchRoute: boolean;
+  method: string;
+  headers: Record<string, string | string[] | undefined>;
+}): boolean {
+  if (request.noTouchRoute) return false;
+  const background =
+    request.method === 'GET' && request.headers[LIVE_BACKGROUND_HEADER] === '1';
+  return !background;
 }
 
 // Anyone who is not signed-in staff learns nothing about the admin area: every refusal is a 404.
@@ -89,11 +111,20 @@ export class OpsGuard implements CanActivate {
     const request = context.switchToHttp().getRequest<OpsRequest>();
     const session = await sessionOf(this.database, request);
     const token = readCookie(request, OPS_COOKIE);
+    const noTouch = this.reflector.getAllAndOverride<boolean | undefined>(
+      OPS_NO_TOUCH,
+      [context.getHandler(), context.getClass()],
+    );
     const grant =
       session && token
         ? await resolveOpsGrant(this.database.db, {
             token,
             sessionId: session.sessionId,
+            touch: touchesIdleClock({
+              noTouchRoute: Boolean(noTouch),
+              method: request.method,
+              headers: request.headers,
+            }),
           })
         : null;
     if (!session || !grant || grant.userId !== session.userId) throw hidden();

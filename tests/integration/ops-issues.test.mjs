@@ -14,6 +14,7 @@ import {
 import {
   WEB,
   browserHeaders,
+  openEventStream,
   opsSignIn,
   signIn,
   startStack,
@@ -35,6 +36,8 @@ before(async () => {
     databaseUrl: database.url,
     apiEnv: {
       WEB_ORIGIN: WEB,
+      LIVE_UPDATES_ENABLED: 'true',
+      RATE_LIMIT_LIVE_CONNECT_PER_MIN: '100000',
       RATE_LIMIT_AUTH_PER_HOUR: '1000',
       RATE_LIMIT_OPS_REQUEST_PER_HOUR: '10000',
       RATE_LIMIT_QUOTES_PER_MIN: '1000',
@@ -43,9 +46,13 @@ before(async () => {
   });
 });
 after(async () => {
+  // An open stream holds app.close() forever.
+  for (const stream of streams) stream.close();
   await stack.stop();
   await database.close();
 });
+
+const streams = new Set();
 
 const call = (method, path, cookie, body) =>
   fetch(`${stack.api}${path}`, {
@@ -565,4 +572,27 @@ test('the API refuses a hand close while the payout is unfinished, and says wher
     ).status,
     400,
   );
+});
+
+test('resolving an issue reaches issues staff', async () => {
+  const owner = await opsSignIn(stack.api, database.db, '+2348039990031');
+  await aloneAmongStaff('+2348039990031');
+  const profileId = await profileIdOf('ada');
+  const issueId = await moneyIssue(profileId);
+  await placeHold(profileId, issueId);
+  // The owner role holds issues.view: their own stream is the one to watch.
+  const stream = await openEventStream(`${stack.api}/v1/ops/events`, {
+    cookie: owner.cookie,
+    origin: WEB,
+  });
+  streams.add(stream);
+  await stream.waitFor(/^data: \{"type":"ready"\}$/);
+  const response = await call(
+    'POST',
+    `/v1/ops/issues/${issueId}/resolve`,
+    owner.cookie,
+    { reason: REASON, outcome: 'recipient_owes' },
+  );
+  assert.equal(response.status, 200);
+  await stream.waitFor(/^data: \{"type":"ops\.issues\.changed"\}$/);
 });

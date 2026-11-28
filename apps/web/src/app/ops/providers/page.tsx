@@ -1,6 +1,14 @@
 'use client';
-import { useEffect, useId, useState, type FormEvent } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type FormEvent,
+} from 'react';
 import type {
+  LiveEventType,
   OpsMailProviderCard,
   OpsMailProviders,
   OpsProviderRetire,
@@ -24,6 +32,12 @@ import { can, useOpsAccess, when } from '@/lib/ops-client';
 import { outcomeIsUnknown, refusalWords } from '@/lib/ops-answers';
 import { opsAct, opsFetch } from '@/lib/ops-staff-api';
 import { lagosTime, liveNowNote, trialNote } from '@/lib/ops-failover';
+import { useLiveEvents, useLiveStatus } from '@/components/live/live-provider';
+import { ownTimerRuns } from '@/lib/own-timer';
+import { nextProviderDeadline } from '@/lib/provider-deadline';
+import { BACKGROUND_READ, type LiveRead } from '@/lib/live-refetch';
+
+const PROVIDERS_CHANGED: readonly LiveEventType[] = ['ops.providers.changed'];
 
 /** Automatic failover's view of one provider (owner, 23 Nov 2026). */
 function HealthLine({
@@ -612,26 +626,60 @@ export default function ProvidersPage() {
   const access = useOpsAccess();
   const [data, setData] = useState<OpsMailProviders | null>(null);
   const [failed, setFailed] = useState(false);
-  const [version, setVersion] = useState(0);
+  // Nothing is applied once the page is gone, and only the newest read is: an older one answering
+  // late never puts back what a newer one replaced.
+  const gone = useRef(false);
+  const reads = useRef(0);
   useEffect(() => {
-    void opsFetch<OpsMailProviders>('/v1/ops/providers/mail').then((result) => {
-      if (result.ok) setData(result.data);
-      else setFailed(true);
-    });
-  }, [version]);
-  const refresh = () => setVersion((v) => v + 1);
+    gone.current = false;
+    return () => {
+      gone.current = true;
+    };
+  }, []);
+  // A promise, so the live scheduler runs one read at a time (useLiveEvents).
+  // `live`: the stream (or its rest deadline) started this read, not the person: not activity.
+  const refresh = useCallback(async (live?: LiveRead) => {
+    const read = ++reads.current;
+    const result = await opsFetch<OpsMailProviders>(
+      '/v1/ops/providers/mail',
+      live,
+    );
+    if (gone.current || read !== reads.current) return;
+    if (result.ok) {
+      setData(result.data);
+      setFailed(false);
+    } else setFailed(true);
+  }, []);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- nothing is set before the await
+    void refresh();
+  }, [refresh]);
+  const reload = useCallback(() => void refresh(), [refresh]);
   // A test moves on its own (sent, retried, failed), and so does a resting provider (trial,
-  // recovered): follow them while one is waiting.
+  // recovered). Connected, the worker and the API signal each of those and the stream reads the
+  // page again; only a rest running out has no write behind it, so one timeout waits for it.
+  useLiveEvents(PROVIDERS_CHANGED, (live) => refresh(live));
+  const ownTimer = ownTimerRuns(useLiveStatus());
   const waiting = data?.providers.some(
     (p) =>
       p.lastTest?.status === 'pending' ||
       (p.health !== null && p.health.state !== 'healthy'),
   );
+  // No stream covers the page (live updates off): today's 5 s while one is waiting.
   useEffect(() => {
-    if (!waiting) return;
-    const timer = setInterval(() => setVersion((v) => v + 1), 5000);
+    if (!waiting || !ownTimer) return;
+    const timer = setInterval(reload, 5000);
     return () => clearInterval(timer);
-  }, [waiting]);
+  }, [waiting, ownTimer, reload]);
+  // The stream covers it: one timeout for the earliest rest's end, armed again after each read
+  // (each read is a new `data`), and cleared when it is replaced or the page goes.
+  useEffect(() => {
+    if (ownTimer || !data) return;
+    const ms = nextProviderDeadline(data.providers, Date.now(), Math.random);
+    if (ms === null) return;
+    const timer = setTimeout(() => void refresh(BACKGROUND_READ), ms);
+    return () => clearTimeout(timer);
+  }, [data, ownTimer, refresh]);
   const canManage = can(access, 'providers.manage');
   return (
     <div className="ops-page-body">
@@ -654,16 +702,16 @@ export default function ProvidersPage() {
               Last switched {when(data.changedAt)}: {data.reason}
             </p>
           )}
-          <Failover data={data} canManage={canManage} onChange={refresh} />
+          <Failover data={data} canManage={canManage} onChange={reload} />
           {data.providers.map((card) => (
             <ProviderCard
               key={card.name}
               card={card}
               canManage={canManage}
-              onChange={refresh}
+              onChange={reload}
             />
           ))}
-          <Overrides data={data} canManage={canManage} onChange={refresh} />
+          <Overrides data={data} canManage={canManage} onChange={reload} />
           {can(access, 'private.view') && (
             <Suppressions canManage={canManage} />
           )}

@@ -32,7 +32,13 @@ export async function expireStaleTips(input: {
   now: Date;
   graceMs?: number;
   limit?: number;
-}): Promise<{ expired: number; paid: number; errors: number }> {
+}): Promise<{
+  expired: number;
+  paid: number;
+  errors: number;
+  /** The tips cancelled here, so the caller can tell their receipts after the commit. */
+  expiredTipIds: string[];
+}> {
   const { db, now } = input;
   const cutoff = new Date(now.getTime() - (input.graceMs ?? 15 * 60_000));
   const candidates = await guarded(() =>
@@ -67,6 +73,7 @@ export async function expireStaleTips(input: {
   let expired = 0;
   let paid = 0;
   let errors = 0;
+  const expiredTipIds: string[] = [];
   for (const candidate of candidates) {
     try {
       const provider =
@@ -138,7 +145,11 @@ export async function expireStaleTips(input: {
           continue;
         }
       }
-      if (await expire(db, candidate.attemptId)) expired += 1;
+      const cancelled = await expire(db, candidate.attemptId);
+      if (cancelled) {
+        expired += 1;
+        expiredTipIds.push(cancelled);
+      }
     } catch {
       // One failing check must not stop the batch; the tip stays as it was.
       errors += 1;
@@ -154,7 +165,7 @@ export async function expireStaleTips(input: {
   await clearFinishedAddressKeys(db).catch(() => {
     errors += 1;
   });
-  return { expired, paid, errors };
+  return { expired, paid, errors, expiredTipIds };
 }
 
 /**
@@ -185,8 +196,11 @@ export async function clearFinishedAddressKeys(
   return result.rowCount ?? 0;
 }
 
-/** Attempt → EXPIRED and tip → CANCELLED together, only if nothing moved them meanwhile. */
-function expire(db: Database, attemptId: string): Promise<boolean> {
+/**
+ * Attempt → EXPIRED and tip → CANCELLED together, only if nothing moved them meanwhile. The
+ * cancelled tip's id, or null when nothing changed.
+ */
+function expire(db: Database, attemptId: string): Promise<string | null> {
   const traceId = activeTraceId();
   return guarded(() =>
     db.transaction(async (tx) => {
@@ -203,14 +217,14 @@ function expire(db: Database, attemptId: string): Promise<boolean> {
         !attempt ||
         !(EXPIRABLE as readonly string[]).includes(attempt.status)
       )
-        return false;
+        return null;
       const [tip] = await tx
         .select({ id: tips.id, status: tips.status })
         .from(tips)
         .where(eq(tips.intentId, attempt.intentId))
         .for('update');
       if (!tip || !canTransition(TIP_TRANSITIONS, tip.status, 'CANCELLED'))
-        return false;
+        return null;
       await tx
         .update(paymentAttempts)
         .set({ status: 'EXPIRED' })
@@ -235,7 +249,7 @@ function expire(db: Database, attemptId: string): Promise<boolean> {
         cause: 'expiry',
         traceId,
       });
-      return true;
+      return tip.id;
     }),
   );
 }

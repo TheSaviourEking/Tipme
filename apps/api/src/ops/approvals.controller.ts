@@ -4,11 +4,13 @@ import {
   Get,
   HttpCode,
   Inject,
+  Optional,
   Param,
   Post,
   Query,
 } from '@nestjs/common';
 import {
+  approvalsChanged,
   opsApprovalListSchema,
   opsApproveSchema,
   opsReasonSchema,
@@ -31,6 +33,7 @@ import { API_CONFIG, type ApiConfig } from '../config.js';
 import { CodedHttpException } from '../http/coded.exception.js';
 import { ZodValidationPipe } from '../http/zod-validation.pipe.js';
 import { DatabaseProvider } from '../infra/database.js';
+import { LIVE_PUBLISHER, type PublishLive } from '../live/live-publisher.js';
 import { ProfileRevalidator } from '../profiles/revalidate.js';
 import { FeatureSwitches } from '../switches/feature-switches.service.js';
 import { SERIOUS_SERVICES } from './serious-services.js';
@@ -53,6 +56,9 @@ export class OpsApprovalsController {
     @Inject(ProfileRevalidator)
     private readonly revalidator: ProfileRevalidator,
     @Inject(FeatureSwitches) private readonly switches: FeatureSwitches,
+    @Optional()
+    @Inject(LIVE_PUBLISHER)
+    private readonly publishLive: PublishLive = async () => undefined,
   ) {
     this.key = Buffer.from(config.OPS_TOTP_KEY, 'base64');
   }
@@ -93,6 +99,8 @@ export class OpsApprovalsController {
     });
     switch (outcome.status) {
       case 'approved': {
+        // The request ran: the list moves on every staff screen (the worker's outbox signal is the backstop).
+        void this.publishLive(approvalsChanged);
         // After the commit: a public page showing the old fee, as the route would refresh it.
         const {
           revalidateHandle,
@@ -146,6 +154,7 @@ export class OpsApprovalsController {
       grantId: ops.grantId,
       reason: body.reason,
     });
+    void this.publishLive(approvalsChanged);
     return { data: { status: 'rejected' } };
   }
 
@@ -161,6 +170,7 @@ export class OpsApprovalsController {
       requestId: uuidParam(id),
       actorId: ops.userId,
     });
+    void this.publishLive(approvalsChanged);
     return { data: { status: 'cancelled' } };
   }
 }

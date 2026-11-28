@@ -4,6 +4,7 @@ import {
   Get,
   HttpCode,
   Inject,
+  Optional,
   Param,
   Post,
   Res,
@@ -16,6 +17,7 @@ import {
   opsMailOverrideSchema,
   opsMailSwitchSchema,
   opsMailTestSchema,
+  opsProvidersChanged,
   opsProviderTestConfirmSchema,
   opsSuppressionLookupSchema,
   opsSuppressionRemoveSchema,
@@ -73,6 +75,7 @@ import { pendingOr, SERIOUS_SERVICES } from './serious-services.js';
 import { CodedHttpException } from '../http/coded.exception.js';
 import { ZodValidationPipe } from '../http/zod-validation.pipe.js';
 import { DatabaseProvider } from '../infra/database.js';
+import { LIVE_PUBLISHER, type PublishLive } from '../live/live-publisher.js';
 import {
   MAIL_HEALTH,
   MAIL_PROVIDERS,
@@ -98,6 +101,9 @@ export class OpsProvidersController {
     @Inject(MAIL_HEALTH) private readonly health: MailHealth,
     @Inject(PAYOUT_PROVIDERS_TOKEN)
     private readonly payoutProviders: PayoutProviderSet,
+    @Optional()
+    @Inject(LIVE_PUBLISHER)
+    private readonly publishLive: PublishLive = async () => undefined,
   ) {}
 
   /** The providers that stand in for each other; empty or one: no automatic failover. */
@@ -269,14 +275,13 @@ export class OpsProvidersController {
     @Body(new ZodValidationPipe(opsProviderTestConfirmSchema))
     body: OpsProviderTestConfirmRequest,
   ): Promise<ApiDataResponse<{ outcome: 'confirmed' | 'invalid' }>> {
-    return {
-      data: {
-        outcome: await confirmProviderTest(this.database.db, {
-          token: body.token,
-          staffUserId: ops.userId,
-        }),
-      },
-    };
+    const outcome = await confirmProviderTest(this.database.db, {
+      token: body.token,
+      staffUserId: ops.userId,
+    });
+    // After the confirm committed: a Providers page waiting on this test reads it again.
+    if (outcome === 'confirmed') void this.publishLive(opsProvidersChanged);
+    return { data: { outcome } };
   }
 
   @Post('mail/active')
@@ -357,6 +362,7 @@ export class OpsProvidersController {
     } catch {
       throw unavailable();
     }
+    void this.publishLive(opsProvidersChanged);
     return { data: { cleared: true } };
   }
 

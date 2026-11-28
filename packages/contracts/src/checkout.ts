@@ -189,4 +189,10 @@ export interface TipStatusView {
    * so the receipt can say who was paid. Older APIs send nothing.
    */
   collectedByTipMe?: true;
+  /**
+   * Live updates (addendum §3.6): true when the receipt may follow this tip on
+   * `GET /v1/tips/:tipId/events` with the same token; false (or absent, from older APIs) means poll
+   * as before and make no stream request.
+   */
+  live?: boolean;
 }

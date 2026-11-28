@@ -147,6 +147,7 @@ Serious actions wait for a second qualified person, and run alone with an alert 
 | Method | Path | Needs CSRF check | Rate limit | Pretend only |
 | --- | --- | --- | --- | --- |
 | POST | `/v1/tips/{tipId}/business-note` | – | `business_note` | – |
+| GET | `/v1/tips/{tipId}/events` | n/a (read) | `live_connect` | – |
 | POST | `/v1/tips/{tipId}/recognition/stop` | – | – | – |
 | GET | `/v1/tips/{tipId}/status` | n/a (read) | – | – |
 
@@ -510,6 +511,7 @@ Serious actions wait for a second qualified person, and run alone with an alert 
 | POST | `/v1/ops/approvals/{id}/approve` | yes | `ops_code` | – |
 | POST | `/v1/ops/approvals/{id}/cancel` | yes | – | – |
 | POST | `/v1/ops/approvals/{id}/reject` | yes | – | – |
+| GET | `/v1/ops/events` | n/a (read) | `live_connect` | – |
 | GET | `/v1/ops/pages/{handle}` | n/a (read) | – | – |
 
 <!-- /generated:routes -->

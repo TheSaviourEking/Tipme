@@ -147,3 +147,141 @@ test('on the dashboard the notice and the tab bar never overlap @mobile', async 
   expect(card).not.toBeNull();
   expect(card!.y + card!.height).toBeLessThanOrEqual(bar!.y);
 });
+
+// How often the notice checks follows the page's live streams (addendum §3.5). These tests fake
+// the page's clock; every entry below is timed on that clock (performance.now), so a check and
+// the stream ready that caused it can be told apart.
+
+interface Seen {
+  kind: 'connect' | 'ready' | 'check';
+  at: number;
+}
+
+/** Records each stream connect, each stream ready and each version check, in order. */
+async function recordChecks(page: Page) {
+  await page.addInitScript(() => {
+    const w = window as unknown as { __seen: Seen[] };
+    w.__seen = [];
+    const seen = (kind: Seen['kind']) =>
+      w.__seen.push({ kind, at: performance.now() });
+    const nativeFetch = window.fetch.bind(window);
+    window.fetch = (input, init) => {
+      const url =
+        typeof input === 'string'
+          ? input
+          : input instanceof URL
+            ? input.href
+            : input.url;
+      if (new URL(url, location.href).pathname === '/api/version')
+        seen('check');
+      return nativeFetch(input, init);
+    };
+    const Native = window.EventSource;
+    window.EventSource = class extends Native {
+      constructor(url: string | URL, init?: EventSourceInit) {
+        super(url, init);
+        seen('connect');
+        this.addEventListener('message', (event) => {
+          try {
+            const { type } = JSON.parse(String(event.data)) as {
+              type?: unknown;
+            };
+            if (type === 'ready') seen('ready');
+          } catch {
+            // Not ours to judge: the client ignores it too.
+          }
+        });
+      }
+    };
+  });
+}
+
+const seenSoFar = (page: Page) =>
+  page.evaluate(() => (window as unknown as { __seen: Seen[] }).__seen);
+
+const count = async (page: Page, kind: Seen['kind']) =>
+  (await seenSoFar(page)).filter((entry) => entry.kind === kind).length;
+
+test('a connected dashboard checks the version on each stream ready, not on a timer', async ({
+  page,
+}, testInfo) => {
+  await page.clock.install();
+  await recordChecks(page);
+  await signUpRecipient(page, testInfo, { live: false });
+  await page.goto('/dashboard');
+  await expect(page.locator('[data-live="connected"]')).toBeAttached({
+    timeout: 15_000,
+  });
+  // The stream's first ready checks once.
+  await expect.poll(() => count(page, 'check')).toBe(1);
+  await page.waitForTimeout(2_000);
+  expect(await count(page, 'check')).toBe(1);
+
+  // Six minutes pass with no heartbeat: a 5-minute timer would check, and the client's watchdog
+  // starts the stream again (L-R12). Only the reconnect's ready may check.
+  await page.clock.fastForward('06:00');
+  await expect(page.locator('[data-live="connected"]')).toBeAttached({
+    timeout: 20_000,
+  });
+  await expect.poll(() => count(page, 'ready'), { timeout: 20_000 }).toBe(2);
+  await expect.poll(() => count(page, 'check')).toBe(2);
+  await page.waitForTimeout(2_000);
+
+  const seen = await seenSoFar(page);
+  expect(seen.filter((entry) => entry.kind === 'connect').length).toBe(2);
+  // Every check follows its own ready: no check without a ready since the one before.
+  let readySinceCheck = false;
+  for (const entry of seen) {
+    if (entry.kind === 'ready') readySinceCheck = true;
+    if (entry.kind !== 'check') continue;
+    expect(readySinceCheck, JSON.stringify(seen)).toBe(true);
+    readySinceCheck = false;
+  }
+  // At most once a minute.
+  const checks = seen.filter((entry) => entry.kind === 'check');
+  for (let i = 1; i < checks.length; i += 1)
+    expect(checks[i]!.at - checks[i - 1]!.at).toBeGreaterThanOrEqual(60_000);
+});
+
+test('a dashboard with live updates off checks every 5 minutes', async ({
+  page,
+}, testInfo) => {
+  await page.clock.install();
+  await recordChecks(page);
+  await page.route('**/v1/me/events', (route) =>
+    route.fulfill({ status: 204 }),
+  );
+  await signUpRecipient(page, testInfo, { live: false });
+  await page.goto('/dashboard');
+  await expect(page.locator('[data-live="disabled"]')).toBeAttached({
+    timeout: 15_000,
+  });
+  expect(await count(page, 'check')).toBe(0);
+  // The provider joined before the stream said it was off; the interval started then.
+  await page.clock.fastForward('04:30');
+  await page.waitForTimeout(500);
+  expect(await count(page, 'check')).toBe(0);
+  await page.clock.fastForward('01:00');
+  await expect.poll(() => count(page, 'check')).toBe(1);
+  await page.clock.fastForward('05:00');
+  await expect.poll(() => count(page, 'check')).toBe(2);
+});
+
+test('a public page checks every 30 minutes', async ({ page }) => {
+  await page.clock.install();
+  await recordChecks(page);
+  await page.goto('/');
+  // The notice is listening (so its interval is armed) once coming back checks.
+  await comeBackUntil(page, async () => (await count(page, 'check')) > 0);
+  await page.waitForTimeout(500);
+  const base = await count(page, 'check');
+
+  await page.clock.fastForward('05:00');
+  await page.waitForTimeout(500);
+  expect(await count(page, 'check')).toBe(base);
+  await page.clock.fastForward('24:00');
+  await page.waitForTimeout(500);
+  expect(await count(page, 'check')).toBe(base);
+  await page.clock.fastForward('01:30');
+  await expect.poll(() => count(page, 'check')).toBe(base + 1);
+});

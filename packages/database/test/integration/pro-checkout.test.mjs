@@ -130,6 +130,8 @@ test('the partner’s confirmation and read-back: PAID, one pro.<id> transaction
   const outcome = await confirm(db, bought.purchaseId, paid());
   assert.equal(outcome.outcome, 'paid');
   assert.equal(outcome.planChanged, true);
+  // Live updates (addendum §3.7): this call settled it, so pro.changed goes once.
+  assert.equal(outcome.settled, true);
   assert.equal((await purchaseRow(db, bought.purchaseId)).status, 'PAID');
   const lines = await q(
     db,
@@ -187,10 +189,10 @@ test('checkout.completed then collection.succeeded, or a duplicate, books once',
   const db = await setup(t);
   const bought = await buy(db, partner());
   assert.equal((await confirm(db, bought.purchaseId, paid())).outcome, 'paid');
-  assert.equal(
-    (await confirm(db, bought.purchaseId, paid(), later(6 * MIN))).outcome,
-    'already',
-  );
+  const again = await confirm(db, bought.purchaseId, paid(), later(6 * MIN));
+  assert.equal(again.outcome, 'already');
+  // Already settled: no second pro.changed.
+  assert.equal(again.settled, false);
   assert.equal(
     (
       await q(
@@ -257,13 +259,22 @@ test('a late bank transfer after the purchase EXPIRED is credited from the confi
     currency: 'NGN',
     feeMinor: 0n,
   });
-  await reconcileProPurchases(db.db, {
+  const expired = await reconcileProPurchases(db.db, {
     provider: fake,
     providerName: 'bachs',
     now: later(40 * MIN),
     sealing,
   });
   assert.equal((await purchaseRow(db, bought.purchaseId)).status, 'EXPIRED');
+  assert.equal(expired.settled.length, 1);
+  assert.equal(
+    expired.settled[0].profileId,
+    (
+      await q(db, `SELECT profile_id FROM pro_purchases WHERE id = $1`, [
+        bought.purchaseId,
+      ])
+    )[0].profile_id,
+  );
   const confirmedAt = later(50 * MIN);
   const outcome = await confirm(
     db,
@@ -272,6 +283,8 @@ test('a late bank transfer after the purchase EXPIRED is credited from the confi
     confirmedAt,
   );
   assert.equal(outcome.outcome, 'paid');
+  // A late credit on a purchase that had already closed is not a settle: no second pro.changed.
+  assert.equal(outcome.settled, false);
   const [period] = await q(db, `SELECT starts_at FROM pro_periods`);
   assert.equal(period.starts_at.toISOString(), confirmedAt.toISOString());
   assert.equal((await outbox(db, 'pro.late_payment')).length, 1);
@@ -289,6 +302,7 @@ test('a short or over amount, or another currency, goes to REVIEW: a money issue
     const bought = await buy(db, partner());
     const outcome = await confirm(db, bought.purchaseId, verified);
     assert.equal(outcome.outcome, 'review');
+    assert.equal(outcome.settled, true);
     assert.equal((await purchaseRow(db, bought.purchaseId)).status, 'REVIEW');
     assert.equal((await outbox(db, 'pro.amount_mismatch')).length, 1);
     assert.equal((await q(db, `SELECT 1 FROM ledger_transactions`)).length, 0);
@@ -365,6 +379,7 @@ test('a lost answer leaves the purchase UNKNOWN; reconciling finds the same chec
     sealing,
   });
   assert.equal(result.paid.length, 1);
+  assert.equal(result.settled.length, 1);
   // Asked again with the same key: the partner dedupes it, so no second checkout exists.
   assert.equal(fake.calls.length, 2);
   assert.equal(fake.calls[1].idempotencyKey, fake.calls[0].idempotencyKey);
@@ -383,20 +398,28 @@ test('a stale PENDING the partner reports failed is EXPIRED, and a new purchase 
     feeMinor: 0n,
   });
   // Too young: left alone.
-  await reconcileProPurchases(db.db, {
+  const young = await reconcileProPurchases(db.db, {
     provider: fake,
     providerName: 'bachs',
     now: later(MIN),
     sealing,
   });
   assert.equal((await purchaseRow(db, bought.purchaseId)).status, 'PENDING');
-  await reconcileProPurchases(db.db, {
+  assert.deepEqual(young.settled, []);
+  const run = await reconcileProPurchases(db.db, {
     provider: fake,
     providerName: 'bachs',
     now: later(31 * MIN),
     sealing,
   });
   assert.equal((await purchaseRow(db, bought.purchaseId)).status, 'EXPIRED');
+  // Expired by the read-back: one settle, for this page (pro.changed from the worker).
+  const [{ profile_id: profileId }] = await q(
+    db,
+    `SELECT profile_id FROM pro_purchases WHERE id = $1`,
+    [bought.purchaseId],
+  );
+  assert.deepEqual(run.settled, [{ profileId }]);
   assert.equal(
     (await buy(db, fake, { now: later(32 * MIN) })).status,
     'PENDING',

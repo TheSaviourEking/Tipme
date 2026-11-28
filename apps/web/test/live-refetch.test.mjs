@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { createRefetchScheduler } from '../src/lib/live-refetch.ts';
+import {
+  BACKGROUND_READ,
+  createRefetchScheduler,
+} from '../src/lib/live-refetch.ts';
 import { nextPanelState } from '../src/components/dashboard/panel-state.ts';
 
 function fakeTimers() {
@@ -257,4 +260,29 @@ test('withdrawals.changed waits 0–10 s when nothing is in flight, and refetche
   scheduler.signal('withdrawals.changed');
   await timers.advance(300);
   assert.equal(reads, 2);
+});
+
+// Final review I1 (ruling L-R22): every read the scheduler runs was started by the stream (a
+// signal, a resync, the fallback poll, the extra run after one), never by the person, so each is
+// handed the background marker to send. OpsGuard then doesn't count it as staff activity.
+test('every scheduled read is handed the background marker', async () => {
+  assert.deepEqual(BACKGROUND_READ, { headers: { 'x-tipme-background': '1' } });
+  const { s, timers } = scheduler();
+  const reads = [];
+  let release;
+  s.register(['ops.approvals.changed'], async (read) => {
+    reads.push(read);
+    if (reads.length === 1) await new Promise((r) => (release = r));
+  });
+  s.resyncAll({ delayMs: 0 });
+  await timers.advance(0);
+  // A signal during the run gives one more run after it.
+  s.signal('ops.approvals.changed');
+  await timers.advance(300);
+  release();
+  await timers.advance(0);
+  s.resyncAll();
+  await timers.advance(300);
+  assert.equal(reads.length, 3);
+  for (const read of reads) assert.equal(read, BACKGROUND_READ);
 });

@@ -16,12 +16,15 @@ import {
   withdrawalProviderProvider,
 } from './payment-provider.provider.js';
 import { RateLimitGuard } from './rate-limit.guard.js';
+import { ReceiptCheckService } from './receipt-check.service.js';
 import { StatusController } from './status.controller.js';
+import { TipLiveController } from './tip-live.controller.js';
 
 @Module({
-  controllers: [CheckoutController, StatusController],
+  controllers: [CheckoutController, StatusController, TipLiveController],
   providers: [
     CheckoutService,
+    ReceiptCheckService,
     RateLimitGuard,
     paymentProviderProvider,
     bachsProviderProvider,

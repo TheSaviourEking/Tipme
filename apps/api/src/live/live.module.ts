@@ -2,25 +2,29 @@ import { Global, Module } from '@nestjs/common';
 import { liveChannel } from '@tipme/contracts';
 import type { Logger } from '@tipme/observability';
 import type { Redis } from 'ioredis';
+import { CsrfGuard } from '../auth/csrf.guard.js';
 import { SessionGuard } from '../auth/session.guard.js';
 import { RateLimitGuard } from '../checkout/rate-limit.guard.js';
+import { OpsGuard } from '../ops/ops.guard.js';
 import { API_CONFIG, type ApiConfig } from '../config.js';
 import { REDIS } from '../infra/infra.module.js';
 import { LOGGER } from '../tokens.js';
-import { LiveController } from './live.controller.js';
+import { LiveController, OpsLiveController } from './live.controller.js';
 import { LiveHubService } from './live-hub.service.js';
 import { createLivePublisher, LIVE_PUBLISHER } from './live-publisher.js';
 
 /**
- * The live stream and the publisher API routes call after their write resolves. Global, so any
+ * The live streams (recipient and staff) and the publisher API routes call after their write resolves. Global, so any
  * controller can inject LIVE_PUBLISHER without importing this module.
  */
 @Global()
 @Module({
-  controllers: [LiveController],
+  controllers: [LiveController, OpsLiveController],
   providers: [
     LiveHubService,
     SessionGuard,
+    CsrfGuard,
+    OpsGuard,
     RateLimitGuard,
     {
       provide: LIVE_PUBLISHER,

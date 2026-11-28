@@ -3,7 +3,13 @@ import { randomUUID } from 'node:crypto';
 import { after, before, test } from 'node:test';
 import { openTestDatabase } from '../../packages/database/dist/test-support.js';
 import * as ops from '../../packages/database/dist/index.js';
-import { WEB, browserHeaders, opsSignIn, startStack } from './helpers.mjs';
+import {
+  WEB,
+  browserHeaders,
+  openEventStream,
+  opsSignIn,
+  startStack,
+} from './helpers.mjs';
 
 // Staff announcements (14 Nov 2026) over HTTP: the screen's calls, and who may make them.
 let database;
@@ -15,10 +21,18 @@ before(async () => {
   ops.registerRealSeriousActions();
   stack = await startStack({
     databaseUrl: database.url,
-    apiEnv: { WEB_ORIGIN: WEB, RATE_LIMIT_AUTH_PER_HOUR: '1000' },
+    apiEnv: {
+      WEB_ORIGIN: WEB,
+      LIVE_UPDATES_ENABLED: 'true',
+      RATE_LIMIT_LIVE_CONNECT_PER_MIN: '100000',
+      RATE_LIMIT_AUTH_PER_HOUR: '1000',
+    },
   });
 });
+const streams = new Set();
 after(async () => {
+  // An open stream holds app.close() forever.
+  for (const stream of streams) stream.close();
   await stack.stop();
   await database.close();
 });
@@ -132,5 +146,53 @@ test('without announcements.send, every call is refused', async () => {
   assert.equal(
     (await call(session, '/preview', { method: 'POST', body: draft })).status,
     403,
+  );
+});
+
+test('cancelling a sending announcement reaches announcement staff only', async () => {
+  const sender = await opsSignIn(stack.api, database.db, phone());
+  // Staff with no announcements.send: a role holding everything but it, as above.
+  const number = phone();
+  const other = await opsSignIn(stack.api, database.db, number);
+  const role = `role_${randomUUID().slice(0, 8)}`;
+  await q(`INSERT INTO roles (id, name) VALUES ($1, $1)`, [role]);
+  await q(
+    `INSERT INTO role_permissions (role_id, permission)
+     SELECT $1, permission FROM role_permissions WHERE role_id = 'owner' AND permission <> 'announcements.send'`,
+    [role],
+  );
+  await q(
+    `UPDATE staff SET role_id = $1 WHERE user_id = (SELECT id FROM users WHERE phone_e164 = $2)`,
+    [role, number],
+  );
+  const created = await call(sender, '', { method: 'POST', body: draft });
+  const announcement = (await created.json()).data;
+  await q(
+    `UPDATE announcements SET status = 'sending', recipient_count = 5, queued_count = 0,
+            send_started_at = now() WHERE id = $1`,
+    [announcement.id],
+  );
+  const open = async (person) => {
+    const stream = await openEventStream(`${stack.api}/v1/ops/events`, {
+      cookie: person.cookie,
+      origin: WEB,
+    });
+    streams.add(stream);
+    await stream.waitFor(/^data: \{"type":"ready"\}$/);
+    return stream;
+  };
+  const withGrant = await open(sender);
+  const without = await open(other);
+  const cancelled = await call(sender, `/${announcement.id}/cancel`, {
+    method: 'POST',
+    body: { reason: 'Stopping this send on purpose' },
+  });
+  assert.equal(cancelled.status, 200);
+  await withGrant.waitFor(/^data: \{"type":"ops\.announcements\.changed"\}$/);
+  // A beat for a wrong delivery to arrive, then it must not have.
+  await new Promise((resolve) => setTimeout(resolve, 1000));
+  assert.equal(
+    without.frames.some((frame) => /ops\.announcements\.changed/.test(frame)),
+    false,
   );
 });

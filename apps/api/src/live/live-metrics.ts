@@ -1,6 +1,6 @@
 import { getMeter } from '@tipme/observability';
 import { SERVICE_NAME } from '../config.js';
-import type { LiveCloseReason } from './live-router.js';
+import type { LiveCloseReason, LiveStreamCounts } from './live-router.js';
 
 export type LiveConnectOutcome =
   | 'opened'
@@ -11,7 +11,9 @@ export type LiveConnectOutcome =
   | 'rate_limited'
   | 'draining'
   /** The client left during the connect, before the stream opened. */
-  | 'client_gone';
+  | 'client_gone'
+  /** A receipt asked to follow a tip that is already final (204). */
+  | 'final';
 
 export interface LiveMetrics {
   connect(outcome: LiveConnectOutcome): void;
@@ -23,7 +25,7 @@ export interface LiveMetrics {
 
 /** The API's live-update metrics (spec §10). Routine opens and closes are counted, not logged. */
 export function createLiveMetrics(observe: {
-  counts(): { me: number; ops: number };
+  counts(): LiveStreamCounts;
   subscriberUp(): boolean;
 }): LiveMetrics {
   const meter = getMeter(SERVICE_NAME);
@@ -38,6 +40,7 @@ export function createLiveMetrics(observe: {
       const counts = observe.counts();
       observer.observe(streams, counts.me, { stream: 'me' });
       observer.observe(streams, counts.ops, { stream: 'ops' });
+      observer.observe(streams, counts.tip, { stream: 'tip' });
       observer.observe(subscriber, observe.subscriberUp() ? 1 : 0);
     },
     [streams, subscriber],

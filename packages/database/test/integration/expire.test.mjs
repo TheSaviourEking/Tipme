@@ -98,7 +98,13 @@ test('stale tip expiry', async (t) => {
         provider,
         now: staleNow,
       });
-      assert.deepEqual(result, { expired: 1, paid: 0, errors: 0 });
+      // The cancelled tip's id, so the worker can tell its receipt.
+      assert.deepEqual(result, {
+        expired: 1,
+        paid: 0,
+        errors: 0,
+        expiredTipIds: [tip.tipId],
+      });
       assert.deepEqual(provider.asked, [tip.reference]);
       assert.deepEqual(await statuses(tip), {
         tip: 'CANCELLED',
@@ -125,7 +131,12 @@ test('stale tip expiry', async (t) => {
         provider,
         now: staleNow,
       });
-      assert.deepEqual(again, { expired: 0, paid: 0, errors: 0 });
+      assert.deepEqual(again, {
+        expired: 0,
+        paid: 0,
+        errors: 0,
+        expiredTipIds: [],
+      });
     },
   );
 
@@ -141,7 +152,12 @@ test('stale tip expiry', async (t) => {
         provider,
         now: staleNow,
       });
-      assert.deepEqual(result, { expired: 0, paid: 1, errors: 0 });
+      assert.deepEqual(result, {
+        expired: 0,
+        paid: 1,
+        errors: 0,
+        expiredTipIds: [],
+      });
       assert.deepEqual(await statuses(tip), {
         tip: 'SUCCEEDED',
         attempt: 'VERIFIED_SUCCEEDED',
@@ -163,7 +179,12 @@ test('stale tip expiry', async (t) => {
         provider,
         now: staleNow,
       });
-      assert.deepEqual(result, { expired: 0, paid: 1, errors: 0 });
+      assert.deepEqual(result, {
+        expired: 0,
+        paid: 1,
+        errors: 0,
+        expiredTipIds: [],
+      });
       assert.deepEqual(provider.asked, [`attempt:${tip.attemptId}`, reference]);
       assert.deepEqual(await statuses(tip), {
         tip: 'SUCCEEDED',
@@ -191,7 +212,12 @@ test('stale tip expiry', async (t) => {
         provider,
         now: staleNow,
       });
-      assert.deepEqual(result, { expired: 1, paid: 0, errors: 0 });
+      assert.deepEqual(result, {
+        expired: 1,
+        paid: 0,
+        errors: 0,
+        expiredTipIds: [tip.tipId],
+      });
       assert.deepEqual(provider.asked, [`attempt:${tip.attemptId}`]);
       assert.deepEqual(await statuses(tip), {
         tip: 'CANCELLED',
@@ -216,7 +242,12 @@ test('stale tip expiry', async (t) => {
         provider,
         now: staleNow,
       });
-      assert.deepEqual(result, { expired: 0, paid: 0, errors: 1 });
+      assert.deepEqual(result, {
+        expired: 0,
+        paid: 0,
+        errors: 1,
+        expiredTipIds: [],
+      });
       assert.deepEqual(await statuses(tip), {
         tip: 'AWAITING_PAYMENT',
         attempt: 'CREATED',
@@ -233,7 +264,12 @@ test('stale tip expiry', async (t) => {
       provider,
       now: freshNow,
     });
-    assert.deepEqual(result, { expired: 0, paid: 0, errors: 0 });
+    assert.deepEqual(result, {
+      expired: 0,
+      paid: 0,
+      errors: 0,
+      expiredTipIds: [],
+    });
     assert.deepEqual(provider.asked, []);
     assert.deepEqual(await statuses(tip), {
       tip: 'AWAITING_PAYMENT',
@@ -256,7 +292,12 @@ test('stale tip expiry', async (t) => {
         provider,
         now: staleNow,
       });
-      assert.deepEqual(result, { expired: 0, paid: 0, errors: 1 });
+      assert.deepEqual(result, {
+        expired: 0,
+        paid: 0,
+        errors: 1,
+        expiredTipIds: [],
+      });
       assert.deepEqual(await statuses(tip), {
         tip: 'AWAITING_PAYMENT',
         attempt: 'INITIATED',
@@ -287,7 +328,12 @@ test('stale tip expiry', async (t) => {
         now: staleNow,
         limit: 1,
       });
-      assert.deepEqual(first, { expired: 0, paid: 0, errors: 1 });
+      assert.deepEqual(first, {
+        expired: 0,
+        paid: 0,
+        errors: 1,
+        expiredTipIds: [],
+      });
       // The failed check moves to the back of the queue, so the next run reaches the other tip.
       const second = await expireStaleTips({
         db: database.db,
@@ -295,7 +341,12 @@ test('stale tip expiry', async (t) => {
         now: new Date(staleNow.getTime() + 1000),
         limit: 1,
       });
-      assert.deepEqual(second, { expired: 1, paid: 0, errors: 0 });
+      assert.deepEqual(second, {
+        expired: 1,
+        paid: 0,
+        errors: 0,
+        expiredTipIds: [later.tipId],
+      });
       assert.deepEqual(await statuses(later), {
         tip: 'CANCELLED',
         attempt: 'EXPIRED',

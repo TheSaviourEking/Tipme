@@ -25,7 +25,8 @@ import {
 } from '@/lib/pro-buy';
 import { proPayOptions } from '@/lib/pro-pay-options';
 import { apiFetch } from '@/lib/session-client';
-import { nextCheckDelay } from '@/lib/status-polling';
+import { startProConfirmLoop } from '@/lib/pro-confirm-loop';
+import { useLiveEvents, useLiveStatus } from '@/components/live/live-provider';
 import { SettingsChapter } from './section';
 import { Money } from '@/components/money';
 
@@ -42,9 +43,14 @@ type Followed =
 
 const OPEN: ProPurchase['status'][] = ['PENDING', 'COLLECTING', 'UNKNOWN'];
 
+/** Re-read the followed purchase on these, and on every resync, while the stream is connected. */
+const PRO_SIGNALS = ['pro.changed', 'profile.changed'] as const;
+
 /**
  * Follows the purchase this tab sent to the checkout. Only the server's reading of the partner's
- * confirmation says paid: the return from the checkout itself never does.
+ * confirmation says paid: the return from the checkout itself never does. While the dashboard
+ * stream is connected it reads on `pro.changed`, `profile.changed` and every resync, with no timer;
+ * otherwise it polls on today's nextCheckDelay (src/lib/pro-confirm-loop.ts, addendum §3.7).
  */
 function useReturnedPurchase(onSettled: () => void) {
   const [followed, setFollowed] = useState<Followed | null>(null);
@@ -54,18 +60,28 @@ function useReturnedPurchase(onSettled: () => void) {
   useEffect(() => {
     settledRef.current = onSettled;
   });
+  const connected = useLiveStatus() === 'connected';
+  const connectedRef = useRef(connected);
+  const loopRef = useRef<ReturnType<typeof startProConfirmLoop> | null>(null);
+  useEffect(() => {
+    connectedRef.current = connected;
+    loopRef.current?.setConnected(connected);
+  }, [connected]);
+  // A no-op while nothing is followed: no request.
+  useLiveEvents(
+    PRO_SIGNALS,
+    () => loopRef.current?.signal() ?? Promise.resolve(),
+  );
 
   useEffect(() => {
     const purchaseId = returningPurchase();
     if (!purchaseId) return;
     let stopped = false;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const started = Date.now();
     const balance = balanceRef.current;
     setFollowed({ kind: 'confirming', purchase: null, balance });
-    const check = async (attempt: number) => {
+    const check = async () => {
       const result = await readPurchase(purchaseId);
-      if (stopped) return;
+      if (stopped) return 'done' as const;
       if (result.ok && !OPEN.includes(result.data.status)) {
         forgetPurchase();
         const status = result.data.status;
@@ -80,26 +96,30 @@ function useReturnedPurchase(onSettled: () => void) {
                   : 'review',
         });
         settledRef.current();
-        return;
+        return 'done' as const;
       }
       if (!result.ok && result.status === 404) {
         forgetPurchase();
         setFollowed(null);
-        return;
+        return 'done' as const;
       }
-      if (result.ok)
-        setFollowed({ kind: 'confirming', purchase: result.data, balance });
-      const delay = nextCheckDelay(attempt, Date.now() - started);
-      if (delay === null) {
-        setFollowed({ kind: 'gave-up' });
-        return;
-      }
-      timer = setTimeout(() => void check(attempt + 1), delay);
+      if (!result.ok) return 'failed' as const;
+      setFollowed({ kind: 'confirming', purchase: result.data, balance });
+      return 'open' as const;
     };
-    void check(0);
+    const loop = startProConfirmLoop({
+      read: check,
+      setTimeout: (fn, ms) => window.setTimeout(fn, ms),
+      clearTimeout: (timer) => window.clearTimeout(timer as number),
+      now: () => Date.now(),
+      connected: connectedRef.current,
+      onGiveUp: () => setFollowed({ kind: 'gave-up' }),
+    });
+    loopRef.current = loop;
     return () => {
       stopped = true;
-      if (timer) clearTimeout(timer);
+      loop.stop();
+      if (loopRef.current === loop) loopRef.current = null;
     };
   }, [round]);
 

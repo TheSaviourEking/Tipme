@@ -4,6 +4,7 @@ import {
   Get,
   HttpCode,
   Inject,
+  Optional,
   Param,
   Post,
   Put,
@@ -14,6 +15,7 @@ import {
   opsAnnouncementDraftSchema,
   opsAnnouncementEditSchema,
   opsAnnouncementSendSchema,
+  opsAnnouncementsChanged,
   opsReasonSchema,
   type ApiDataResponse,
   type OpsActedAlone,
@@ -46,6 +48,7 @@ import { API_CONFIG, type ApiConfig } from '../config.js';
 import { CodedHttpException } from '../http/coded.exception.js';
 import { ZodValidationPipe } from '../http/zod-validation.pipe.js';
 import { DatabaseProvider } from '../infra/database.js';
+import { LIVE_PUBLISHER, type PublishLive } from '../live/live-publisher.js';
 import { MAIL_SEALING } from '../mail/mail-providers.provider.js';
 import { FreshCode } from './fresh-code.guard.js';
 import { CurrentOps, type OpsContext } from './ops.guard.js';
@@ -74,6 +77,9 @@ export class OpsAnnouncementsController {
     @Inject(SERIOUS_SERVICES) private readonly services: SeriousActionServices,
     @Inject(MAIL_SEALING) private readonly sealing: MailSealing,
     @Inject(API_CONFIG) private readonly config: ApiConfig,
+    @Optional()
+    @Inject(LIVE_PUBLISHER)
+    private readonly publishLive: PublishLive = async () => undefined,
   ) {}
 
   @Get()
@@ -225,12 +231,13 @@ export class OpsAnnouncementsController {
     @Param('id') id: string,
     @Body(new ZodValidationPipe(opsReasonSchema)) body: OpsReasonRequest,
   ): Promise<ApiDataResponse<OpsAnnouncement>> {
-    return {
-      data: await cancelAnnouncement(this.database.db, {
-        staffUserId: ops.userId,
-        id: announcementId(id),
-        reason: body.reason,
-      }),
-    };
+    const data = await cancelAnnouncement(this.database.db, {
+      staffUserId: ops.userId,
+      id: announcementId(id),
+      reason: body.reason,
+    });
+    // After the stop committed: a screen showing "Sending: x of N" reads the new state.
+    void this.publishLive(opsAnnouncementsChanged);
+    return { data };
   }
 }

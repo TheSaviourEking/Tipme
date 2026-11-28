@@ -1,9 +1,16 @@
 import {
   DISPUTE_HOLD_EVENT,
+  OPS_GRANTS_ENDED_EVENT,
   PAYOUT_START_EVENT,
   PLATFORM_REFUSAL_EVENT,
   WITHDRAWAL_FREEZE_OPENED_EVENT,
   WITHDRAWALS_SWITCH_EVENT,
+  approvalsChanged,
+  issuesChanged,
+  opsAnnouncementsChanged,
+  opsProvidersChanged,
+  staffChanged,
+  tipChanged,
   type LiveMessage,
 } from '@tipme/contracts';
 
@@ -24,11 +31,20 @@ function profileOf(payload: unknown): string | null {
   return typeof id === 'string' && UUID.test(id) ? id : null;
 }
 
+function tipOf(payload: unknown): string | null {
+  if (!payload || typeof payload !== 'object') return null;
+  const id = (payload as { tipId?: unknown }).tipId;
+  return typeof id === 'string' && UUID.test(id) ? id : null;
+}
+
 type Mapping = (payload: unknown) => LiveMessage[];
 const none: Mapping = () => [];
 const toAll =
   (type: LiveMessage['type']): Mapping =>
   () => [{ to: { all: true }, type }];
+/** Every staff stream checks its grant again (never forwarded to a browser). */
+const toStaffStreams: Mapping = () => [staffChanged];
+const toApprovalsStaff: Mapping = () => [approvalsChanged];
 const toProfile =
   (type: LiveMessage['type']): Mapping =>
   (payload) => {
@@ -36,24 +52,38 @@ const toProfile =
     return profile ? [{ to: { profile }, type }] : [];
   };
 
+/** A tip that became final: its page's tips, and its own receipt streams. */
+const toProfileAndReceipt: Mapping = (payload) => {
+  const tip = tipOf(payload);
+  return [
+    ...toProfile('tips.changed')(payload),
+    ...(tip ? [tipChanged(tip)] : []),
+  ];
+};
+
 /**
  * Every event the relay puts on the queue, each mapped explicitly, so a new event type fails the
- * unit test until someone decides its signal. Staff events stay `none` until PR 3.
+ * unit test until someone decides its signal.
  */
 const OUTBOX_SIGNALS: Readonly<Record<string, Mapping>> = {
-  // Written with the tip, attempt and ledger in one transaction (provider-events.ts).
-  'tip.succeeded': toProfile('tips.changed'),
-  'tip.failed': toProfile('tips.changed'),
+  // Written with the tip, attempt and ledger in one transaction (provider-events.ts): the
+  // recipient's dashboards, and the supporter's open receipt (addendum §3.6).
+  'tip.succeeded': toProfileAndReceipt,
+  'tip.failed': toProfileAndReceipt,
   // Written with the payout's outcome (payouts.ts): its status, and the balance when it failed.
   'payout.paid': toProfile('withdrawals.changed'),
   'payout.failed': toProfile('withdrawals.changed'),
   'payout.conflict': none,
   'ops.acted_alone': none,
-  'ops.approval_pending': none,
-  'ops.last_approver_removed': none,
-  'ops.approval_ran': none,
-  'ops.approval_closed': none,
-  'ops.staff_changed': none,
+  // Written with the request, its decision or its close (serious-actions.ts): the approvals list moved.
+  'ops.approval_pending': toApprovalsStaff,
+  // Who holds what changed: each staff stream re-checks its grant and permission set.
+  'ops.last_approver_removed': toStaffStreams,
+  'ops.approval_ran': toApprovalsStaff,
+  'ops.approval_closed': toApprovalsStaff,
+  'ops.staff_changed': toStaffStreams,
+  // Grants ended outside a staff change (an authenticator reset, a resent invitation, a move).
+  [OPS_GRANTS_ENDED_EVENT]: toStaffStreams,
   // The issue's page: `profileId` was added to this payload for live updates (issues.ts).
   'ops.freeze_released': toProfile('withdrawals.changed'),
   'provider_event.conflict': none,
@@ -163,6 +193,8 @@ export function jobSignalsFor(
   outcome: string,
   data: unknown,
 ): LiveMessage[] {
+  // A domain event whose handler opened an issue: the inbox of staff who may read issues.
+  if (outcome === 'issue_opened') return [issuesChanged];
   if (jobName === PAYOUT_START_EVENT)
     return PAYOUT_START_CHANGED.has(outcome)
       ? toProfile('withdrawals.changed')(data)
@@ -213,4 +245,52 @@ export async function businessTipSignals(
   } catch {
     return [];
   }
+}
+
+/**
+ * After the expiry pass: each tip it cancelled as never paid tells its open receipt (addendum
+ * §3.6). Ids that are not uuids are dropped.
+ */
+export function expiredTipSignals(tipIds: readonly string[]): LiveMessage[] {
+  return tipIds.filter((id) => UUID.test(id)).map((id) => tipChanged(id));
+}
+
+/**
+ * After the reconcile sweep: the inbox changed only if it opened or auto-resolved something. One
+ * signal for the whole sweep, however many issues moved.
+ */
+export function reconcileIssueSignals(counts: {
+  opened: number;
+  resolved: number;
+}): LiveMessage[] {
+  return counts.opened > 0 || counts.resolved > 0 ? [issuesChanged] : [];
+}
+
+/**
+ * After an announcements tick: only a queued batch moved the "x of N" staff are watching. Idle and
+ * paused ticks (every 10 s while nothing sends, or while the daily limit holds it) change nothing.
+ */
+export function announcementSignals(
+  outcome:
+    'announcements_queued' | 'announcements_idle' | 'announcements_paused',
+): LiveMessage[] {
+  return outcome === 'announcements_queued' ? [opsAnnouncementsChanged] : [];
+}
+
+/**
+ * Mail health's `onChange` (tripped, still down, recovered): the staff alert first, then a signal
+ * for the Providers page. The signal goes even when the alert fails, and the alert's failure still
+ * reaches the breaker, which logs it.
+ */
+export function signalProvidersAfter<E>(
+  alert: (event: E) => Promise<void>,
+  publishLive: (messages: LiveMessage[]) => Promise<void>,
+): (event: E) => Promise<void> {
+  return async (event) => {
+    try {
+      await alert(event);
+    } finally {
+      void publishLive([opsProvidersChanged]);
+    }
+  };
 }

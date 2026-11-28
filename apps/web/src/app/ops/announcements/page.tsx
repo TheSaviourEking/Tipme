@@ -8,6 +8,7 @@ import {
   announcementTextProblems,
   type AnnouncementAudience,
   type AnnouncementKind,
+  type LiveEventType,
   type OpsAnnouncement,
   type OpsAnnouncementDailyLimit,
   type OpsAnnouncementDraft,
@@ -36,8 +37,17 @@ import { when } from '@/lib/ops-client';
 import { opsAct, opsFetch } from '@/lib/ops-staff-api';
 import type { SessionResult } from '@/lib/session-client';
 import { LoadFailed } from '@/components/dashboard/load-failed';
+import { useLiveEvents, useLiveStatus } from '@/components/live/live-provider';
+import type { LiveRead } from '@/lib/live-refetch';
+import { ownTimerRuns } from '@/lib/own-timer';
 
-const fetchList = () => opsFetch<OpsAnnouncementList>('/v1/ops/announcements');
+const ANNOUNCEMENTS_CHANGED: readonly LiveEventType[] = [
+  'ops.announcements.changed',
+];
+
+// `live`: the stream started this read (not the person), so it is not staff activity.
+const fetchList = (live?: LiveRead) =>
+  opsFetch<OpsAnnouncementList>('/v1/ops/announcements', live);
 
 /*
  * Staff announcements by email (owner-approved, 14 Nov 2026). Staff write the words, preview the real
@@ -188,23 +198,30 @@ export default function AnnouncementsPage() {
         : current,
     );
   }, []);
-  const load = useCallback(() => fetchList().then(apply), [apply]);
+  const load = useCallback(
+    (live?: LiveRead) => fetchList(live).then(apply),
+    [apply],
+  );
 
   useEffect(() => {
     void fetchList().then(apply);
   }, [apply]);
 
-  // While one sends, its count moves: read it again every 5 seconds.
+  // While one sends, its count moves: the worker signals each queued batch and the stream reads
+  // the list again. The 5 s timer below runs only when no stream covers the page.
   // The list is newest first; the worker sends the oldest one first.
   const sendingRow =
     list?.filter((row) => row.state === 'sending').at(-1) ?? null;
   const sending = sendingRow !== null;
   const paused = sending && daily?.remaining === 0;
+  useLiveEvents(ANNOUNCEMENTS_CHANGED, (live) => load(live));
+  const status = useLiveStatus();
+  const ownTimer = ownTimerRuns(status);
   useEffect(() => {
-    if (!sending) return;
+    if (!sending || !ownTimer) return;
     const timer = setInterval(() => void load(), 5000);
     return () => clearInterval(timer);
-  }, [sending, load]);
+  }, [sending, ownTimer, load]);
 
   const choose = (a: OpsAnnouncement | null) => {
     setOpen(a);

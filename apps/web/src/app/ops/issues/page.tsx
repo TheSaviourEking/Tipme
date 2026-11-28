@@ -1,10 +1,29 @@
 'use client';
 import Link from 'next/link';
-import { useEffect, useId, useState } from 'react';
-import type { OpsIssue } from '@tipme/contracts';
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useReducer,
+  useRef,
+  useState,
+} from 'react';
+import type { LiveEventType, OpsIssue } from '@tipme/contracts';
 import { Badge, Button, EmptyWell, Skeleton, Slip } from '@tipme/ui';
 import { age, ISSUE_KIND_LABELS, SEVERITY_LABELS } from '@/lib/ops-client';
 import { opsFetch } from '@/lib/ops-staff-api';
+import type { LiveRead } from '@/lib/live-refetch';
+import {
+  INITIAL_ISSUES_LIST,
+  createFirstPageReads,
+  issuesListReducer,
+  type FirstPageMode,
+} from '@/lib/issues-list';
+import { ownTimerRuns } from '@/lib/own-timer';
+import { useLiveEvents, useLiveStatus } from '@/components/live/live-provider';
+
+const ISSUES_CHANGED: readonly LiveEventType[] = ['ops.issues.changed'];
+const NO_SIGNALS: readonly LiveEventType[] = [];
 
 type Filters = { status: string; severity: string };
 
@@ -16,42 +35,83 @@ const query = (filters: Filters, cursor?: string) => {
   return `/v1/ops/issues?${params.toString()}`;
 };
 
-/** Everything that needs a person, newest first; refreshed every 30 seconds while open. */
+/**
+ * Everything that needs a person, newest first. With live updates, the first page reads again on
+ * `ops.issues.changed`; without them (or while the stream is off), every 30 seconds while open.
+ */
 export default function IssuesPage() {
   const id = useId();
   const [filters, setFilters] = useState<Filters>({
     status: 'open',
     severity: '',
   });
-  const [issues, setIssues] = useState<OpsIssue[] | null>(null);
-  const [more, setMore] = useState(false);
-  const [failed, setFailed] = useState(false);
+  // Every answer applies to the list as it is when it lands (src/lib/issues-list.ts): a first
+  // page and a "Show more" in flight together never drop or mix each other's rows.
+  const [list, dispatch] = useReducer(
+    issuesListReducer<OpsIssue>,
+    INITIAL_ISSUES_LIST,
+  );
+  const { issues, more, newChanges, failed } = list;
   const [now, setNow] = useState(0);
+  const filtersNow = useRef(filters);
+  useEffect(() => {
+    filtersNow.current = filters;
+  });
+  const [reads] = useState(createFirstPageReads);
+
+  /**
+   * The first page with the current filters. An older answer never replaces a newer one, and a
+   * pending replace (filters, "New changes: show") is never downgraded by a later signal read.
+   */
+  const firstPage = useCallback(
+    // `live`: the stream started this read (not the person), so it is not staff activity.
+    async (mode: FirstPageMode, live?: LiveRead) => {
+      const ticket = reads.start(mode);
+      const result = await opsFetch<OpsIssue[]>(
+        query(filtersNow.current),
+        live,
+      );
+      const apply = reads.land(ticket, result.ok);
+      if (!apply) return;
+      setNow(Date.now());
+      if (!result.ok) dispatch({ type: 'firstFailed' });
+      else dispatch({ type: 'first', rows: result.data, mode: apply });
+    },
+    [reads],
+  );
+
+  // A signal means something changed; with more pages showing it offers the change instead of
+  // replacing rows under the reader (the base design's Tips-page rule).
+  useLiveEvents(ISSUES_CHANGED, (live) => firstPage('signal', live), {
+    resync: false,
+  });
+  // A resync (the ready, the fallback poll, the tab coming back) only says "check".
+  useLiveEvents(NO_SIGNALS, (live) => firstPage('check', live));
 
   useEffect(() => {
-    const load = () =>
-      void opsFetch<OpsIssue[]>(query(filters)).then((result) => {
-        setNow(Date.now());
-        if (!result.ok) return setFailed(true);
-        setFailed(false);
-        setIssues(result.data);
-        setMore(result.data.length === 50);
-      });
-    load();
+    void firstPage('replace');
+  }, [filters, firstPage]);
+
+  // No stream covering the page (live updates off, or no EventSource): today's 30 s refresh.
+  const status = useLiveStatus();
+  const ownTimer = ownTimerRuns(status);
+  useEffect(() => {
+    if (!ownTimer) return;
     const timer = setInterval(() => {
-      if (document.visibilityState === 'visible') load();
+      if (document.visibilityState === 'visible') void firstPage('replace');
     }, 30_000);
     return () => clearInterval(timer);
-  }, [filters]);
+  }, [filters, firstPage, ownTimer]);
 
   const loadMore = async () => {
     const last = issues?.at(-1);
     if (!last) return;
+    const generation = list.generation;
     const result = await opsFetch<OpsIssue[]>(query(filters, last.id));
-    if (result.ok) {
-      setIssues([...(issues ?? []), ...result.data]);
-      setMore(result.data.length === 50);
-    }
+    // Dropped by the reducer if a newer first page replaced the list meanwhile, or if this row is
+    // no longer last (a double-click already added the page).
+    if (result.ok)
+      dispatch({ type: 'more', rows: result.data, generation, after: last.id });
   };
 
   return (
@@ -93,8 +153,17 @@ export default function IssuesPage() {
       </div>
       {failed && (
         <Slip dense tone="error" title="Couldn’t load the issues">
-          Check your connection; the list retries every 30 seconds.
+          {ownTimer || status === 'polling'
+            ? 'Check your connection; the list retries every 30 seconds.'
+            : 'Check your connection; the list tries again when something changes.'}
         </Slip>
+      )}
+      {newChanges && (
+        <p>
+          <Button variant="quiet" onClick={() => void firstPage('replace')}>
+            New changes: show
+          </Button>
+        </p>
       )}
       {!issues && !failed && <Skeleton label="Loading issues" />}
       {issues?.length === 0 && (

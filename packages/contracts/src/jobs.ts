@@ -13,6 +13,12 @@ export const WITHDRAWAL_FREEZE_OPENED_EVENT = 'withdrawals.freeze_opened';
 export const PLATFORM_REFUSAL_EVENT = 'payouts.platform_refused';
 /** You collect (Task 9): a dispute holds part of a recipient's balance; the worker emails them. */
 export const DISPUTE_HOLD_EVENT = 'collect.dispute_hold';
+/**
+ * Outbox: someone's admin grants ended outside a staff change (an authenticator reset, a resent
+ * invitation, a phone or email move, a recovery). Written by dropOpsAccess in its transaction; the
+ * relay turns it into `staff.changed`, so their open staff stream closes at once. No alert, no mail.
+ */
+export const OPS_GRANTS_ENDED_EVENT = 'ops.grants_ended';
 
 /** W3C trace context carried inside job payloads so worker spans join the producer's trace. */
 export const traceCarrierSchema = z

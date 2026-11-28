@@ -419,7 +419,8 @@ test('exactly the pinned routes let any staff through, and none also names a per
     }
   }
   assert.deepEqual([...found].sort(), Object.keys(pinned).sort());
-  assert.equal(found.size, 5);
+  // The staff live stream (/v1/ops/events) is the sixth: signal types only, by grant permission.
+  assert.equal(found.size, 6);
 });
 
 const staleCode = (phone) =>

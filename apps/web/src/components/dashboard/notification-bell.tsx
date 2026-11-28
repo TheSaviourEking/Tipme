@@ -13,6 +13,7 @@ import {
   useLiveStatus,
 } from '@/components/live/live-provider';
 import { RECOVERY_EMAIL_CHANGED } from '@/lib/owner-attention';
+import { ownTimerRuns } from '@/lib/own-timer';
 import { apiFetch } from '@/lib/session-client';
 import {
   createFirstRead,
@@ -75,7 +76,7 @@ function useNotifications(onFresh: (fresh: NotificationView[]) => void) {
 
   useLiveEvents(NOTIFICATIONS_CHANGED, reload);
   const status = useLiveStatus();
-  const ownPoll = status === 'idle' || status === 'disabled';
+  const ownPoll = ownTimerRuns(status);
   // One read on load: while the stream connects, its ready resync is the first (first-read.ts).
   useEffect(() => {
     const controller = createFirstRead({
