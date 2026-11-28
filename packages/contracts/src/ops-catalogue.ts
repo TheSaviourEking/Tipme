@@ -300,6 +300,25 @@ export const OPS_FRESH_CODE_EXEMPT: Record<
     reason:
       'TipMe’s fee per plan and its history: rates, reasons and staff ids, nobody’s private details.',
   },
+  // Fee waivers (spec 2026-11-23 §6): "Who pays the fees" and one account's settings.
+  'OpsFeeWaiversController.state': {
+    verb: 'GET',
+    permission: 'fees.manage',
+    reason:
+      'Who pays the fees: rules, handles, business names, reasons, staff ids and cost totals, nobody’s private details; changes nothing.',
+  },
+  'OpsFeeWaiversController.profile': {
+    verb: 'GET',
+    permission: 'fees.manage',
+    reason:
+      'One page’s fee waiver settings and this month’s waived cost: no contact, card or bank details; changes nothing.',
+  },
+  'OpsFeeWaiversController.business': {
+    verb: 'GET',
+    permission: 'fees.manage',
+    reason:
+      'One business’s withdrawal fee setting and this month’s waived cost: no contact, card or bank details; changes nothing.',
+  },
   'OpsCardCostsController.state': {
     verb: 'GET',
     permission: 'fees.manage',
@@ -478,6 +497,8 @@ export const SERIOUS_ACTIONS = [
   'collect_dispute.evidence',
   'collect_same_bank.clear',
   'tip_refund.record_paid',
+  // Fee waivers (spec 2026-11-23 §6): who pays the tip or withdrawal fee, by kind or per account.
+  'fee_waiver.set',
 ] as const;
 export type SeriousAction = (typeof SERIOUS_ACTIONS)[number];
 
@@ -522,6 +543,7 @@ export const SERIOUS_ACTION_WORDS: Record<SeriousAction, string> = {
   'collect_same_bank.clear': 'Clear a shared bank account hold',
   'tip_refund.record_paid':
     'Record a refund the payment partner paid that TipMe didn’t book',
+  'fee_waiver.set': 'Set who pays a fee',
 };
 
 /** The permission each action needs, and so who can be the second person (spec 6.9). */
@@ -562,4 +584,5 @@ export const SERIOUS_ACTION_PERMISSIONS: Record<SeriousAction, OpsPermission> =
     'collect_dispute.evidence': 'collect.manage',
     'collect_same_bank.clear': 'collect.manage',
     'tip_refund.record_paid': 'collect.manage',
+    'fee_waiver.set': 'fees.manage',
   };

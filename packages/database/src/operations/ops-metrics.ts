@@ -56,7 +56,7 @@ export function healthMetrics(
     const paid = await one(sql`
       WITH t AS (
         SELECT ${week(sql.raw('t.completed_at'))} AS wk, t.profile_id, t.gross_minor, t.created_at, t.completed_at,
-               q.platform_fee_minor, q.waived_platform_fee_minor
+               q.platform_fee_minor, q.waived_platform_fee_minor, q.fee_waiver_id
           FROM tips t JOIN payment_intents i ON i.id = t.intent_id JOIN tip_quotes q ON q.id = i.quote_id
           JOIN profiles rp ON rp.id = t.profile_id AND rp.rehearsal_run_id IS NULL
          WHERE t.status = 'SUCCEEDED')
@@ -66,8 +66,8 @@ export function healthMetrics(
              coalesce(sum(gross_minor) FILTER (WHERE wk = 'last'), 0)::text AS gross_last,
              coalesce(sum(platform_fee_minor) FILTER (WHERE wk = 'this'), 0)::text AS fee_this,
              coalesce(sum(platform_fee_minor) FILTER (WHERE wk = 'last'), 0)::text AS fee_last,
-             coalesce(sum(waived_platform_fee_minor) FILTER (WHERE wk = 'this'), 0) AS waived_this,
-             coalesce(sum(waived_platform_fee_minor) FILTER (WHERE wk = 'last'), 0) AS waived_last,
+             coalesce(sum(waived_platform_fee_minor) FILTER (WHERE wk = 'this' AND fee_waiver_id IS NULL), 0) AS waived_this,
+             coalesce(sum(waived_platform_fee_minor) FILTER (WHERE wk = 'last' AND fee_waiver_id IS NULL), 0) AS waived_last,
              count(DISTINCT profile_id) FILTER (WHERE wk = 'this')::int AS tipped_this,
              count(DISTINCT profile_id) FILTER (WHERE wk = 'last')::int AS tipped_last,
              (SELECT count(*)::int FROM (

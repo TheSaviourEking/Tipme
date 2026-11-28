@@ -2,6 +2,7 @@
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import type { MyTipDetail } from '@tipme/contracts';
+import { FEE_WAIVER_RECIPIENT_COPY } from '@tipme/contracts/copy';
 import { PROCESSING_INCLUDED_FEE_VERSIONS } from '@tipme/domain';
 import { Skeleton, Slip, Surface } from '@tipme/ui';
 import { MessageControls } from '@/components/dashboard/message-controls';
@@ -72,7 +73,15 @@ export default function TipDetailPage() {
           </div>
           <div className="rrow">
             {/* One line (PRD v1.1): what came off the tip, labelled by what it was. */}
-            <dt>{fee.label}</dt>
+            <dt>
+              {fee.label}
+              {/* Fee waivers (W17): from this tip's own quote, so it stays after a waiver ends. */}
+              {tip.feeCoveredByTipMe && (
+                <span className="rrow__note" data-testid="fee-covered">
+                  {FEE_WAIVER_RECIPIENT_COPY.tipCovered}
+                </span>
+              )}
+            </dt>
             <dd>
               −<Money minor={Number(fee.minor)} />
             </dd>

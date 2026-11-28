@@ -296,6 +296,10 @@ export const ISSUE_KINDS = [
   // less than the ledger owes them, and money at a provider that is no longer connected.
   'provider_split_short',
   'provider_unconnected_money',
+  // Fee waivers (spec 2026-11-23 §5, §6; W13, W14): a TipMe-pays rule ends within a day, and tip
+  // waivers are paused while TipMe's own partner balance reads low.
+  'fee_waiver_ending',
+  'fee_waivers_paused',
 ] as const;
 export type OpsIssueKind = (typeof ISSUE_KINDS)[number];
 /**

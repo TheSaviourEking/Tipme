@@ -159,3 +159,176 @@ export const BUSINESS_SPLIT_COPY = {
   heldTitle: 'Some tips can’t be paid out yet',
   held: 'Some of the business’s tips were paid in a way TipMe can’t pay out from yet. They’re safe, and stay in the business’s balance until withdrawals open.',
 } as const;
+
+/**
+ * Fee waivers (spec 2026-11-23 §6, §7; W13, ruling R22): the in-app notices an account gets when TipMe
+ * starts or stops paying one of its fees. An account waiver is told when it starts and when TipMe
+ * stops paying that fee; a kind-wide waiver's start is told to nobody, and its end to each account
+ * that used its cover. An ended notice names the fee that ended, so it is never false while TipMe
+ * still pays the other one. `until` is put in already worded by `untilWords` ("until 31 Jan": the
+ * last Lagos day covered). Never the payment partner's name.
+ */
+export const FEE_WAIVER_NOTICE_COPY = {
+  startedTitle: 'TipMe is covering your fees',
+  /** A business's notice names it: its owners may have pages of their own. */
+  startedTitleFor: (business: string) => `TipMe is covering ${business}’s fees`,
+  started: (fee: 'tip' | 'withdrawal', until: string | null) =>
+    `${fee === 'tip' ? 'TipMe is covering the fee on your tips' : 'TipMe is covering your withdrawal fees'}${until === null ? '' : ` ${until}`}`,
+  endedTitle: (fee: 'tip' | 'withdrawal') =>
+    fee === 'tip'
+      ? 'Your tip fee cover has ended'
+      : 'Your withdrawal fee cover has ended',
+  endedTitleFor: (business: string, fee: 'tip' | 'withdrawal') =>
+    `${business}’s ${fee === 'tip' ? 'tip' : 'withdrawal'} fee cover has ended`,
+  ended: (fee: 'tip' | 'withdrawal') =>
+    fee === 'tip'
+      ? 'TipMe has stopped covering the fee on your tips. The normal tip fee applies from now.'
+      : 'TipMe has stopped covering your withdrawal fees. The normal withdrawal fees apply from now.',
+} as const;
+
+/**
+ * Fee waivers (spec 2026-11-23 §7, W17): what a recipient reads while TipMe pays a fee. The
+ * dashboard line is said only while a new tip would be waived; the tip's own line is past tense,
+ * from what its quote recorded. `until` comes in worded by `untilWords` ("until 31 Jan"). Never the
+ * payment partner's name.
+ */
+export const FEE_WAIVER_RECIPIENT_COPY = {
+  /** The started notice's words, so the notice and the dashboard never drift apart. */
+  tipsCovered: (until: string | null) =>
+    FEE_WAIVER_NOTICE_COPY.started('tip', until),
+  tipCovered: 'TipMe covered the fee on this tip.',
+  /** A business's Money section, while TipMe pays its transfer fee; the amount follows. */
+  businessTransferFree: 'Transfer fee: Free.',
+  businessReceives: 'The business receives',
+} as const;
+
+/**
+ * Who pays the fees, for staff (spec 2026-11-23 §6): the grid on Fees, its change dialog, the
+ * Waivers list and the per-account control. Dates come in already worded by `untilWords` ("until 31
+ * Jan"), amounts already formatted (₦12,350). These words reach components the provider-name rule
+ * covers, so they say "the payment partner", never its name.
+ */
+export const FEE_WAIVER_STAFF_COPY = {
+  title: 'Who pays the fees',
+  hint: 'Today’s rules apply until staff set a waiver. A change applies to new tips and withdrawals only: a price already shown keeps its terms.',
+  kinds: {
+    individual: 'Individuals',
+    business: 'Businesses',
+    giving: 'Giving',
+  },
+  /** Giving isn't built: its rules are stored, and nothing reads them yet. */
+  notLive: '(not live)',
+  fees: { tip: 'Tip fee', withdrawal: 'Withdrawal fee' },
+  monthCost: 'Cost so far this month',
+  accountPays: 'Account pays',
+  tipmePays: (until: string | null) =>
+    until === null ? 'TipMe pays' : `TipMe pays · ${until}`,
+  /** Businesses have no tip fee (spec §2). */
+  noFee: '—',
+  incomeGivenUp: 'Fee income given up',
+  cashPaid: 'Cash paid by TipMe',
+  paused: 'Paused (low balance)',
+  pausedTitle: 'Tip fee waivers paused',
+  pausedBody:
+    'TipMe’s balance at the payment partner is low, so new tips are priced normally until it recovers. Tips already priced keep their terms. Fund the balance before approving a kind-wide tip waiver.',
+  /** A grid cell's change set to start later: "From 1 Dec: TipMe pays · until 12 Dec". */
+  upcomingChange: (from: string, words: string) =>
+    `${from.charAt(0).toUpperCase()}${from.slice(1)}: ${words}`,
+  seeAll: 'See every waiver',
+  change: 'Change…',
+  waiting: (count: number) =>
+    count === 1
+      ? 'A change is waiting in Approvals. Who pays hasn’t changed yet.'
+      : `${count} changes are waiting in Approvals. Who pays hasn’t changed yet.`,
+
+  // The change dialog (kind-wide).
+  dialogTitle: 'Change who pays',
+  forLabel: 'Who it’s for',
+  feeLabel: 'Fee',
+  businessTipNote:
+    'Businesses have no tip fee: their staff’s own pages carry it.',
+  payerLegend: 'Who pays',
+  tipmePaysChoice: 'TipMe pays',
+  tipmePaysHint:
+    'The account keeps the whole tip, or pays no withdrawal fee. TipMe pays the partner’s fee itself.',
+  normalChoice: 'Normal rules',
+  normalHint: 'Today’s fees. Choosing this ends a waiver.',
+  startLabel: 'First day (optional)',
+  startHint: 'Lagos time. Leave it empty to start once approved.',
+  endLabel: 'Last day (optional)',
+  endHint:
+    'The last day this applies, Lagos time. Leave it empty for no end. Up to 24 months ahead.',
+  reasonLabel: 'Reason',
+  reasonHint: 'Recorded in the audit log with your name and the time.',
+  submit: 'Ask for approval',
+  cancel: 'Cancel',
+  monthlyCostTitle: 'What it would cost',
+  confirmCost: (amount: string) =>
+    `TipMe would pay about ${amount} a month, from the last 30 days’ fees. Tick the box to confirm it.`,
+  estimateMoved: (amount: string) =>
+    `The estimate changed to ${amount} since you opened this. Check it and confirm again.`,
+  confirmBox: (amount: string) =>
+    `I confirm TipMe pays about ${amount} a month`,
+  confirmMissing: 'Tick the box to confirm the cost.',
+  reasonShort: 'Please write a reason of at least 10 characters.',
+  endBeforeStart: 'The last day can’t be before the first day.',
+  endPast: 'The last day can’t be in the past.',
+  startPast: 'The first day can’t be in the past.',
+  outOfBounds:
+    'Check the dates: the last day must be after the first, and within 24 months.',
+  done: 'Who pays has changed, for new tips and withdrawals.',
+  meanwhile: 'Who pays stays the same until then.',
+
+  // The Waivers list.
+  listTitle: 'Fee waivers',
+  listHint:
+    'Every rule in force or upcoming: who it is for, when it ends, who set and approved it, and what it has cost so far. Rows are never edited: a change is a new row.',
+  backToFees: '← Fees',
+  inForce: 'In force',
+  upcoming: 'Upcoming',
+  noneInForce: 'No waivers in force',
+  noneUpcoming: 'Nothing upcoming',
+  noneUpcomingBody: 'No change is set to start later.',
+  columns: {
+    who: 'For',
+    fee: 'Fee',
+    payer: 'Who pays',
+    starts: 'Starts',
+    ends: 'Ends',
+    setBy: 'Set by',
+    approvedBy: 'Approved by',
+    cost: 'Cost so far',
+    reason: 'Reason',
+  },
+  allOf: {
+    individual: 'All individuals',
+    business: 'All businesses',
+    giving: 'All Giving accounts',
+  },
+  unknownAccount: 'An account no longer found',
+  noEnd: 'No end date',
+  /** An account's own `account` row: it keeps the normal rules while its kind is waived. */
+  optedOut: 'Normal rules (opted out)',
+  /** A row that only ends a waiver: an account's `inherit`, a kind-wide `account`. */
+  endsWaiver: 'Ends the waiver',
+  carriedOver: 'Carried over from the switch',
+  alone: 'Alone (no second person)',
+
+  // The per-account control.
+  followGlobalNow: (now: string) => `Follows the global setting (now: ${now})`,
+  normalOwn: 'Normal rules, whatever the global setting',
+  accountChoices: {
+    inherit: 'Follow the global setting',
+    tipme: 'TipMe pays',
+    account: 'Normal rules',
+  },
+  accountHints: {
+    inherit: 'Whatever is set for all accounts of this kind on Fees.',
+    tipme: 'TipMe pays this fee for this account.',
+    account: 'Today’s fees, even while its kind is waived.',
+  },
+  changeFee: (fee: 'tip' | 'withdrawal') =>
+    `Change the ${fee === 'tip' ? 'tip' : 'withdrawal'} fee…`,
+  thisMonth: 'This month',
+  sameSetting: 'Choose a setting different from the one in use now.',
+} as const;

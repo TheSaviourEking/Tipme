@@ -234,6 +234,22 @@ export async function openTestDatabase(): Promise<TestDatabase> {
                 clock_timestamp()
            FROM added`,
       );
+      // And the business withdrawal fee rule 0131 carries over from the retired switch (fee waivers
+      // W15), as on a database where the switch was off: the business pays. Same id and text.
+      await client.query(
+        `WITH added AS (
+           INSERT INTO fee_waivers (id, scope, kind, profile_id, business_id, fee, payer, starts_at, ends_at,
+             reason, set_by, approved_by, created_at)
+           VALUES ('00000000-0000-4000-8000-000000000130', 'kind', 'business', NULL, NULL, 'withdrawal',
+             'account', clock_timestamp(), NULL, 'Carried over from the switch', NULL, NULL, clock_timestamp())
+           RETURNING id, payer
+         )
+         INSERT INTO audit_events (id, staff_user_id, action, permission, subject_type, subject_id, reason, created_at)
+         SELECT gen_random_uuid(), NULL, 'fee_waiver.set', 'fees.manage', 'fee_waiver', added.id::text,
+                'Carried over from the switch [change: {"key":"fee_waiver:kind:business:*:withdrawal","from":{"switch":"business_payout_fee_absorbed","on":false},"to":{"payer":"' || added.payer || '","endsAt":null},"approvedBy":null}]',
+                clock_timestamp()
+           FROM added`,
+      );
       // And the launch Business Pro price (Business Pro A1), ₦7,000 a month.
       await client.query(
         `INSERT INTO pro_prices (id, amount_minor, currency, effective_from, plan, reason, created_at)

@@ -8,6 +8,7 @@ import {
   SERIOUS_ACTIONS,
   SERIOUS_ACTION_PERMISSIONS,
   SERIOUS_ACTION_WORDS,
+  apiErrorCodes,
 } from '../dist/index.js';
 
 const opsDir = new URL('../../../apps/api/src/ops/', import.meta.url);
@@ -59,8 +60,9 @@ test('usernames.manage is a sensitive people permission', () => {
   });
 });
 
-test('the serious actions are the agreed thirty-five', () => {
-  assert.equal(new Set(SERIOUS_ACTIONS).size, 35);
+test('the serious actions are the agreed thirty-six', () => {
+  // Fee waivers (spec 2026-11-23 §6) added `fee_waiver.set`; profit guards added `card_costs.change`.
+  assert.equal(new Set(SERIOUS_ACTIONS).size, 36);
   // You collect staff screens (plan Task 15): every money action there needs collect.manage.
   for (const name of [
     'collect_transfer.retry',
@@ -201,4 +203,14 @@ test('announcements.send is sensitive; announcement.send maps to it', () => {
     'announcements.send',
   );
   assert.match(SERIOUS_ACTION_WORDS['announcement.send'], /announcement/i);
+});
+
+// Fee waivers (spec 2026-11-23 §6): who pays a fee is a money change, with a second person; a
+// kind-wide TipMe-pays rule needs its estimated cost confirmed.
+test('fee_waiver.set is a serious action on fees.manage, with its confirm error', () => {
+  assert.ok(SERIOUS_ACTIONS.includes('fee_waiver.set'));
+  assert.equal(SERIOUS_ACTION_PERMISSIONS['fee_waiver.set'], 'fees.manage');
+  assert.equal(SERIOUS_ACTION_WORDS['fee_waiver.set'], 'Set who pays a fee');
+  assert.equal(OPS_CATALOGUE['fees.manage'].sensitive, true);
+  assert.ok(apiErrorCodes.includes('FEE_WAIVER_CONFIRM_REQUIRED'));
 });

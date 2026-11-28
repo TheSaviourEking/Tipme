@@ -31,6 +31,7 @@ async function tipThroughAlt(handle: string) {
       handle,
       tipMinor: 200000n,
       currency: 'NGN',
+      activeProvider: 'mock',
     });
     const intent = await ops.createPaymentIntent(db, {
       quoteId: quote.quoteId,

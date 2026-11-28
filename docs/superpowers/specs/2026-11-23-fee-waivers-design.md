@@ -4,7 +4,7 @@
 **Builds on:**
 
 - final pricing: Free 5% / Pro 3% per tip, processing and payout included, admin-settable (18 Nov);
-- withdrawal fees: 2 free per Lagos day for people, then the partner's fee; businesses pay it unless `business_payout_fee_absorbed` is on (12 Nov, 18 Nov);
+- withdrawal fees: 2 free per Lagos day for people, then the partner's fee; businesses pay it unless `business_payout_fee_absorbed` is on (12 Nov, 18 Nov) (now: the account pays every withdrawal, see the [addendum](#addendum-2728-nov-2026-merged-with-profit-guards-348));
 - plan-fee settings (`plan_fee_rates`, `plan_fees.change`);
 - per-page deals (`profiles.custom_fee_bps`, `fee.change`);
 - fee-free credits (`fee_free_credits`).
@@ -74,7 +74,7 @@ How each setting is written:
 
 1. **An account rule** in force (`starts_at <= now`, and no `ends_at` or `ends_at > now`) whose payer isn't `inherit`. Its payer wins.
 2. **Otherwise a kind rule** in force for the owner's kind.
-3. **Otherwise today's default.** For the tip fee, that's the plan rate, any custom rate and any fee-free credits. For withdrawals, it's 2 free a day for people, and the business pays.
+3. **Otherwise today's default.** For the tip fee, that's the plan rate, any custom rate and any fee-free credits. For withdrawals, it's 2 free a day for people, and the business pays. _Superseded: the account pays every withdrawal; see the [addendum](#addendum-2728-nov-2026-merged-with-profit-guards-348)._
 
 `payer = account` on an account rule means "**this account follows the normal rules**", even while its kind is waived. That's how staff exclude one account from a kind-wide waiver **(design call)**.
 
@@ -89,7 +89,7 @@ How each setting is written:
 - **Withdrawal:** `fee_payer = 'tipme'`, with the new column `payouts.fee_waiver_id`.
 - **Quotes already shown keep the terms they were shown with**, even if a waiver starts or ends before payment. That's today's rule for fee changes.
 
-**Free-withdrawal count:** a waived withdrawal still counts toward the person's 2 free a day. That doesn't matter while the waiver lasts, and when it ends the normal rule continues unchanged **(design call)**.
+**Free-withdrawal count:** a waived withdrawal still counts toward the person's 2 free a day. That doesn't matter while the waiver lasts, and when it ends the normal rule continues unchanged **(design call)**. _Superseded: there is no daily free count any more; see the [addendum](#addendum-2728-nov-2026-merged-with-profit-guards-348)._
 
 ## 5. Money and safety
 
@@ -101,7 +101,7 @@ How each setting is written:
   - Staff get one alert, "Fee waivers paused: TipMe's balance is low", and the Who-pays screen shows "Paused (low balance)" until the reading recovers.
   - Quotes already shown keep their terms.
   - The runbook says to fund the balance before approving a kind-wide tip waiver.
-- **Withdrawal fees TipMe pays** come from the platform reserve top-up, as for the first 2 free withdrawals today. The reserve alerts already apply.
+- **Withdrawal fees TipMe pays** come from the platform reserve top-up, as for the first 2 free withdrawals today. The reserve alerts already apply. _(The daily free withdrawals are gone; see the [addendum](#addendum-2728-nov-2026-merged-with-profit-guards-348).)_
 - **Serious actions** (same handling as `plan_fees.change`):
   - setting or ending a waiver is the new action `fee_waiver.set`, with a fresh code and a mandatory reason;
   - it needs a second approver, or a lone admin acts alone and the owners are alerted;
@@ -123,6 +123,10 @@ Giving          Account pays     Account pays                    (not live)
 [ Change… ]   each change: who pays · optional start · optional end · reason
 ```
 
+_The Individuals withdrawal row now reads "Account pays" (every withdrawal); see the [addendum](#addendum-2728-nov-2026-merged-with-profit-guards-348)._
+
+**Addendum (final review I4):** each grid cell also lists the kind-wide changes set to start later ("From 1 Dec: TipMe pays · until 12 Dec"). Choosing "Normal rules" (or "Follow the global setting" on an account) also cancels every TipMe-pays change of that key set to start later, in the same approved action: one ending row at each scheduled start, each audited, and the approver's words name the waivers it cancels.
+
 **Per account** (the user's, business's or Giving organisation's ops page): "Fees: follow the global setting / TipMe pays / normal rules", for the tip fee and the withdrawal fee separately, each with an optional end date and the cost so far.
 
 **Ops → Plan & fees → Waivers** lists every rule in force or upcoming, with its scope, end date, who set it, who approved it and its cost so far.
@@ -137,6 +141,14 @@ Giving          Account pays     Account pays                    (not live)
 - When a waiver ends, staff are told the day before.
 - An **account** waiver starting or ending sends that account the existing account or service notice.
 - A **kind-wide** waiver sends no mass email. Affected accounts see the line on their dashboard (§7), and staff can send an announcement through the existing announcement flow if they want to.
+
+**Addendum (owner, 27 Nov 2026; ruling R22): people are told when a waiver ends.**
+
+- An account is told its cover ended when TipMe really stops paying that fee for it, never while TipMe still pays it. A renewal ends quietly, and so does an account waiver ending while a kind-wide waiver still covers the account: that account is told when the kind-wide one ends.
+- When a **kind-wide** waiver ends (and isn't renewed), the in-app ended notice goes to each account that used its cover: at least one tip or withdrawal waived under it. An account still covered by its own waiver is told when that one ends. An account opted out of the kind-wide waiver isn't told. Still no email.
+- A kind-wide waiver's **start** still tells nobody.
+- The ended notice names the fee ("TipMe has stopped covering the fee on your tips. The normal tip fee applies from now."), so it is never false while the other fee is still covered. One notice per account and fee, however many rules end together.
+- A tip waiver's started notice waits while tip waivers are paused (§5) and is sent once the pause lifts.
 
 ## 7. What the person sees
 
@@ -196,7 +208,19 @@ None blocking. The design calls are listed for review:
 - no mass email for kind-wide waivers;
 - building this after per-provider balances;
 - a waived tip doesn't use up a fee-free credit;
-- waived withdrawals still count toward the daily 2;
+- waived withdrawals still count toward the daily 2 (moot: see the addendum);
 - confirming the cost of kind-wide waivers;
 - a 24-month limit on end dates;
 - expiry notices.
+
+## Addendum (27–28 Nov 2026): merged with profit guards (#348)
+
+Profit guards ([spec](2026-11-25-profit-guards-design.md), PR #348, owner 25 Nov 2026) removed the daily free withdrawals. This addendum replaces every "2 free a day" above; the original text is kept for history.
+
+- **Default payer:** with no waiver in force, **the account pays every withdrawal** (`fee_payer = 'user'`): a person's page, You collect recipients and businesses alike. The only exception is an unused fee top-up, which is spent first (profit guards, "An unused fee top-up is spent first").
+- **Waivers override the default only while in force.** An account or kind rule with payer `tipme` makes TipMe pay (`fee_payer = 'tipme'`, `fee_waiver_id` set, `waived_fee_minor` = the fee the account would otherwise have paid). `inherit` and `account` fall back to the every-withdrawal default, not to a daily count.
+- **No daily count:** the "free-withdrawal count" rule (§4) and the quote's `ordinalToday` / `freePerDay` no longer mean anything (`freePerDay` is always 0, kept for the contract). The staff screen's Individuals withdrawal default reads "Account pays".
+- **Quote and request:** the request carries who the quote showed paying (`feePaidBy`). If a waiver starts or ends between the quote and the request, the request is refused `WITHDRAWAL_FEE_CHANGED` and the screen shows the new fee (profit guards Ruling R6).
+- **Cost estimate (W11):** for individuals, each withdrawal request in the last 30 days counts once at the fee the account pays under this rule: its charged or waived fee, or, for one TipMe paid under the old daily rule, the partner's current fee (`WITHDRAWAL_FEE_COPY_MINOR`, mirroring `NGN_PAYOUT_FEE_MINOR`). So the figure doesn't under-count while older free withdrawals are still in the window.
+- **Waived tips** offer bank transfer only at checkout (owner, 27 Nov 2026).
+- **Migrations** are now 0130–0133, after profit guards' 0129.

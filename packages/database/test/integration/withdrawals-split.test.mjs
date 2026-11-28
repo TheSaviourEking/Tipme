@@ -20,7 +20,6 @@ import {
   requestBusinessWithdrawal,
   requestWithdrawal,
   sameBank,
-  setFeatureSwitch,
   withdrawalQuote,
   withdrawalsAvailable,
   withdrawalSignalDue,
@@ -35,6 +34,7 @@ import {
   AT_12_NOV_PLAN_FEES,
   atLaunchProPrice,
   useDatabase,
+  waiveFee,
 } from './helpers.mjs';
 
 // Per-provider balances, Task 5 (spec §5, §6, §8): one quote across every configured provider that
@@ -1011,18 +1011,53 @@ test('per-provider withdrawal quote', async (t) => {
     assert.equal(await count('payouts'), 0);
   });
 
-  await t.test('a business split pays at most one fee', async () => {
-    const switchTo = (on) =>
-      db.transaction((tx) =>
-        setFeatureSwitch(tx, {
-          key: 'business_payout_fee_absorbed',
-          on,
-          staffUserId: ADA.userId,
-          approvedBy: null,
-          reason: 'Switched for the split fee test',
-          now: new Date(),
-        }),
+  // Fee waivers (spec 2026-11-23 §7a, W8): the fee is decided once per request; under a waiver
+  // every part is TipMe's, and only the one fee the person would have paid counts as waived.
+  await t.test(
+    'a waived split: every part is tipme with the rule id, and only the largest carries waived_fee_minor',
+    async () => {
+      await database.fresh();
+      await tip('mock_alt');
+      await tip('mock');
+      const rule = await waiveFee(database, {
+        scope: 'account',
+        kind: 'individual',
+        profileId: TOBI.id,
+      });
+      const active = reader('mock', { balance: 372000n, fee: 5000n });
+      const old = reader('mock_alt', { balance: 372000n, fee: 1000n });
+      const result = await ask(set(active, old), 600000n);
+      assert.equal(result.parts.length, 2);
+      const parts = await q(
+        `SELECT provider, amount_minor::text AS amount, fee_payer, user_fee_minor::text AS user_fee,
+                fee_waiver_id, waived_fee_minor::text AS waived
+           FROM payouts WHERE withdrawal_group_id = $1 ORDER BY group_part`,
+        [result.groupId],
       );
+      // Unequal parts: the old provider's 372,000 is the largest, so its ₦10 fee is the one waived.
+      assert.deepEqual(parts, [
+        {
+          provider: 'mock_alt',
+          amount: '372000',
+          fee_payer: 'tipme',
+          user_fee: '0',
+          fee_waiver_id: rule,
+          waived: '1000',
+        },
+        {
+          provider: 'mock',
+          amount: '228000',
+          fee_payer: 'tipme',
+          user_fee: '0',
+          fee_waiver_id: rule,
+          waived: '0',
+        },
+      ]);
+      assert.equal((await balanceOf(db, TOBI.id)).availableMinor, 144000n);
+    },
+  );
+
+  await t.test('a business split pays at most one fee', async () => {
     /** A ₦10,000 tip to Tobi at the business through `provider`; the business takes half. */
     const sharedTip = async (
       provider,
@@ -1121,18 +1156,24 @@ test('per-provider withdrawal quote', async (t) => {
       },
       { amount: '200000', fee_payer: 'tipme', user_fee: '0' },
     ]);
-    // With TipMe paying businesses' fees, none does.
+    // Under the business kind rule with TipMe paying (the switch's successor), none does: every
+    // part carries the rule, and only the largest the one fee the business would have paid.
     const absorbed = await atBusiness();
-    await switchTo(true);
-    try {
-      await split(absorbed);
-      assert.deepEqual(await payers(), [
-        { amount: share.toString(), fee_payer: 'tipme', user_fee: '0' },
-        { amount: '200000', fee_payer: 'tipme', user_fee: '0' },
-      ]);
-    } finally {
-      await switchTo(false);
-    }
+    const rule = await waiveFee(database, { scope: 'kind', kind: 'business' });
+    await split(absorbed);
+    assert.deepEqual(await payers(), [
+      { amount: share.toString(), fee_payer: 'tipme', user_fee: '0' },
+      { amount: '200000', fee_payer: 'tipme', user_fee: '0' },
+    ]);
+    assert.deepEqual(
+      await q(
+        `SELECT fee_waiver_id, waived_fee_minor::text AS waived FROM payouts ORDER BY group_part`,
+      ),
+      [
+        { fee_waiver_id: rule, waived: '5000' },
+        { fee_waiver_id: rule, waived: '0' },
+      ],
+    );
   });
 
   await t.test('You collect limits apply to the request total', async () => {

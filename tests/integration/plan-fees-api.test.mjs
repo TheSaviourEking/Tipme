@@ -188,7 +188,8 @@ test('an owner reads the rates, their source, the business payout rule and no wa
   );
   assert.deepEqual(data.limits, { minBps: 200, maxBps: 1000 });
   assert.equal(data.waitingRequestId, null);
-  assert.deepEqual(data.business, { payoutFeeAbsorbed: false });
+  // The business payout fee is a fee waiver rule now (spec 2026-11-23 §5), not a switch shown here.
+  assert.equal('business' in data, false);
   // Pro above Free is refused before anything is asked.
   const bad = await fetch(`${stack.api}/v1/ops/plan-fees`, {
     method: 'POST',
@@ -334,25 +335,35 @@ test('a move of more than 200 bps is refused without the explicit confirm, and r
   assert.deepEqual(await rates(), [1000n, 300n]);
 });
 
-test('the business payout fee switch is a money switch: a change waits for a second person', async () => {
+// Fee waivers (spec 2026-11-23 §5) replace the business payout fee switch: who pays a business's
+// withdrawal fee is the business kind rule, set through `fee_waiver.set` with a second person.
+test('the business payout fee is the business kind rule: a change waits for a second person', async () => {
   const asker = await person();
   const approver = await person();
+  const business = { owner: { businessId: randomUUID() }, fee: 'withdrawal' };
+  const payer = async () =>
+    (await ops.feeWaiverFor(database.db, { ...business, now: new Date() }))
+      .payer;
+  // The reset's carried-over rule: the business pays (the switch was off).
+  assert.equal(await payer(), 'default');
   const outcome = await ops.requestSeriousAction(database.db, {
-    name: 'feature_switch.set',
-    payload: { key: 'business_payout_fee_absorbed', on: true },
+    name: 'fee_waiver.set',
+    payload: {
+      scope: 'kind',
+      kind: 'business',
+      fee: 'withdrawal',
+      payer: 'tipme',
+      confirmCost: true,
+      // The estimate the screen showed: no business withdrawals in the last 30 days.
+      costEstimateMinor: '0',
+    },
     actorId: asker,
     grantId: people.get(asker).grantId,
     reason: REASON,
     services: services(),
   });
   assert.equal(outcome.state, 'pending');
-  assert.equal(
-    await ops.readFeatureSwitch(database.db, 'business_payout_fee_absorbed'),
-    false,
-  );
+  assert.equal(await payer(), 'default');
   assert.equal((await approve(outcome.requestId, approver)).status, 'approved');
-  assert.equal(
-    await ops.readFeatureSwitch(database.db, 'business_payout_fee_absorbed'),
-    true,
-  );
+  assert.equal(await payer(), 'tipme');
 });

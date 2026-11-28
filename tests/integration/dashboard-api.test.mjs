@@ -360,3 +360,184 @@ test('quotes share the partner read in Redis briefly; a withdrawal clears it', a
     await redis.quit();
   }
 });
+
+/*
+ * Fee waivers (spec 2026-11-23 §7, W17): what the recipient reads. Ada's own page only (account
+ * scope), and last in this file, so no earlier test's fees change. A waiver is ended as e2e ends
+ * one: by inserting a later row that has already ended (W16), never by editing a row.
+ */
+async function tipAda() {
+  const quote = await (
+    await fetch(`${stack.api}/v1/tip-quotes`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        handle: 'ada',
+        amountMinor: '200000',
+        currency: 'NGN',
+      }),
+    })
+  ).json();
+  const intent = await (
+    await fetch(`${stack.api}/v1/tip-intents`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'idempotency-key': randomUUID(),
+      },
+      body: JSON.stringify({
+        quoteId: quote.data.quoteId,
+        payerDisplayLabel: 'A supporter',
+      }),
+    })
+  ).json();
+  const reference = intent.data.checkoutUrl.split('/mock-checkout/')[1];
+  await fetch(`${stack.api}/v1/mock-provider/checkout/${reference}`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ outcome: 'succeed' }),
+  });
+  return intent.data.tipId;
+}
+
+const q = (text, values = []) =>
+  database.pool.query(text, values).then((result) => result.rows);
+
+/** Ada's tip waiver ends now: a later row of the same key, already over (W2, W16). */
+const endAdasTipWaiver = (profileId) =>
+  q(
+    `INSERT INTO fee_waivers (id, scope, kind, profile_id, business_id, fee, payer, starts_at,
+       ends_at, reason, set_by, approved_by, created_at)
+     SELECT gen_random_uuid(), 'account', 'individual', $1::uuid, NULL, 'tip', 'tipme',
+            max(starts_at) + interval '1 millisecond', max(starts_at) + interval '2 milliseconds',
+            'Test: the end date has passed', NULL, NULL, clock_timestamp()
+       FROM fee_waivers
+      WHERE scope = 'account' AND fee = 'tip' AND profile_id = $1::uuid`,
+    [profileId],
+  );
+
+const lowReading = () =>
+  q(
+    `INSERT INTO payment_reserve_readings
+       (id, provider, currency, available_minor, threshold_minor, low, read_at)
+     VALUES (gen_random_uuid(), 'mock', 'NGN', 10000, 100000, true, now())`,
+  );
+const okReading = () =>
+  q(
+    `INSERT INTO payment_reserve_readings
+       (id, provider, currency, available_minor, threshold_minor, low, read_at)
+     VALUES (gen_random_uuid(), 'mock', 'NGN', 900000, 100000, false, now() + interval '1 second')`,
+  );
+
+test('the dashboard carries tipFeeWaiver while an account tip waiver is in force', async () => {
+  const ops = await import('../../packages/database/dist/index.js');
+  const { endOfLagosDayIso, lagosDateOf } =
+    await import('../../packages/domain/dist/index.js');
+  const [ada, tobi] = ops.DEMO_PROFILES;
+  const { cookie } = await session('+2348000000001');
+  const summary = async () =>
+    (await (await get('/v1/me/dashboard', cookie)).json()).data;
+  assert.equal((await summary()).tipFeeWaiver, null);
+
+  const endsAt = endOfLagosDayIso(
+    lagosDateOf(new Date(Date.now() + 40 * 86_400_000)),
+  );
+  await database.db.transaction((tx) =>
+    ops.setFeeWaiver(tx, {
+      scope: 'account',
+      kind: 'individual',
+      profileId: ada.id,
+      fee: 'tip',
+      payer: 'tipme',
+      endsAt,
+      staffUserId: tobi.userId,
+      approvedBy: ada.userId,
+      reason: 'Launch partner for the dashboard test',
+      now: new Date(),
+    }),
+  );
+  assert.deepEqual((await summary()).tipFeeWaiver, { endsAt });
+  // Tobi's page has no waiver: only the account it was set for sees the line.
+  const tobiSession = await session('+2348000000002');
+  assert.equal(
+    (await (await get('/v1/me/dashboard', tobiSession.cookie)).json()).data
+      .tipFeeWaiver,
+    null,
+  );
+
+  await endAdasTipWaiver(ada.id);
+  assert.equal((await summary()).tipFeeWaiver, null);
+});
+
+test('the dashboard line hides while waivers are paused', async () => {
+  const ops = await import('../../packages/database/dist/index.js');
+  const [ada, tobi] = ops.DEMO_PROFILES;
+  const { cookie } = await session('+2348000000001');
+  const summary = async () =>
+    (await (await get('/v1/me/dashboard', cookie)).json()).data;
+  // No end date this time: the line is there with endsAt null.
+  await database.db.transaction((tx) =>
+    ops.setFeeWaiver(tx, {
+      scope: 'account',
+      kind: 'individual',
+      profileId: ada.id,
+      fee: 'tip',
+      payer: 'tipme',
+      staffUserId: tobi.userId,
+      approvedBy: ada.userId,
+      reason: 'Launch partner with no end date',
+      now: new Date(),
+    }),
+  );
+  try {
+    assert.deepEqual((await summary()).tipFeeWaiver, { endsAt: null });
+    // TipMe's balance at the active partner is low (W6): new tips are priced normally, so the line
+    // that says TipMe covers them goes.
+    await lowReading();
+    assert.equal((await summary()).tipFeeWaiver, null);
+    await okReading();
+    assert.deepEqual((await summary()).tipFeeWaiver, { endsAt: null });
+  } finally {
+    await q(`DELETE FROM payment_reserve_readings`);
+    await endAdasTipWaiver(ada.id);
+  }
+});
+
+test('a waived tip’s detail says feeCoveredByTipMe', async () => {
+  const ops = await import('../../packages/database/dist/index.js');
+  const [ada, tobi] = ops.DEMO_PROFILES;
+  const { cookie } = await session('+2348000000001');
+  const detail = async (tipId) =>
+    (await (await get(`/v1/me/tips/${tipId}`, cookie)).json()).data;
+
+  const before = await detail(await tipAda());
+  assert.equal(before.feeCoveredByTipMe, false);
+  assert.notEqual(before.platformFeeMinor, '0');
+
+  await database.db.transaction((tx) =>
+    ops.setFeeWaiver(tx, {
+      scope: 'account',
+      kind: 'individual',
+      profileId: ada.id,
+      fee: 'tip',
+      payer: 'tipme',
+      staffUserId: tobi.userId,
+      approvedBy: ada.userId,
+      reason: 'Launch partner for the tip detail test',
+      now: new Date(),
+    }),
+  );
+  const waivedTip = await tipAda();
+  const waived = await detail(waivedTip);
+  assert.equal(waived.feeCoveredByTipMe, true);
+  assert.equal(waived.platformFeeMinor, '0');
+  assert.equal(waived.providerFeeMinor, '0');
+  assert.equal(waived.netMinor, '200000');
+
+  // The waiver ends; the tip it covered keeps saying so (the quote recorded it), a new one doesn't.
+  await endAdasTipWaiver(ada.id);
+  assert.equal((await detail(waivedTip)).feeCoveredByTipMe, true);
+  const after = await detail(await tipAda());
+  assert.equal(after.feeCoveredByTipMe, false);
+  assert.notEqual(after.platformFeeMinor, '0');
+});

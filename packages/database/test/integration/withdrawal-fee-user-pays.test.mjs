@@ -11,7 +11,6 @@ import {
   recordProviderEvent,
   requestBusinessWithdrawal,
   requestWithdrawal,
-  setFeatureSwitch,
   startPayout,
   withdrawalQuote,
 } from '../../dist/index.js';
@@ -20,7 +19,7 @@ import {
   seedBusiness,
   seedMember,
 } from './business-fixtures.mjs';
-import { useDatabase } from './helpers.mjs';
+import { useDatabase, waiveFee } from './helpers.mjs';
 
 const [ADA, TOBI] = DEMO_PROFILES;
 const ACCOUNT = 'acct_tobi_user_pays';
@@ -346,7 +345,8 @@ test('a payout requested before this release with fee_payer tipme still gets its
   assert.equal(provider.calls.payouts[0].amountMinor, 500_000n);
 });
 
-test('a business is unchanged: it pays, unless staff switch on TipMe paying its fee', async (t) => {
+/** A business holding its share of one ₦40,000 tip, on the pretend provider (no accounts). */
+async function businessSetup(t) {
   const database = await useDatabase(t);
   const { db } = database;
   const q = (sql, params) =>
@@ -430,37 +430,188 @@ test('a business is unchanged: it pays, unless staff switch on TipMe paying its 
       providers: providers(),
       ...(feePaidBy ? { feePaidBy } : {}),
     });
-    return (
-      await q('SELECT fee_payer FROM payouts WHERE id = $1', [payoutId])
-    )[0].fee_payer;
+    return payoutId;
   };
+  const payout = async (payoutId) =>
+    (
+      await q(
+        `SELECT fee_payer, user_fee_minor::text AS fee, fee_waiver_id,
+                waived_fee_minor::text AS waived, amount_minor::text AS amount
+           FROM payouts WHERE id = $1`,
+        [payoutId],
+      )
+    )[0];
+  return { database, businessId, feePayerOf, request, payout };
+}
+
+test('a business is unchanged: it pays, unless a waiver has TipMe paying its fee', async (t) => {
+  const { database, feePayerOf, ...b } = await businessSetup(t);
+  const request = async (feePaidBy) =>
+    (await b.payout(await b.request(feePaidBy))).fee_payer;
   assert.equal(await feePayerOf(), 'user');
   assert.equal(await request(), 'user');
-  await db.transaction((tx) =>
-    setFeatureSwitch(tx, {
-      key: 'business_payout_fee_absorbed',
-      on: true,
-      staffUserId: OWNER,
-      approvedBy: null,
-      reason: 'Switched for the user-pays test',
-      now: new Date(),
-    }),
-  );
+  // Fee waivers (spec 2026-11-23 §5): the business kind rule replaced the
+  // `business_payout_fee_absorbed` switch (the carry-over migration).
+  await waiveFee(database, { scope: 'kind', kind: 'business' });
   assert.equal(await feePayerOf(), 'tipme');
   assert.equal(await request(), 'tipme');
   assert.equal(await request('tipme'), 'tipme');
-  // Ruling R6: staff switch it off after the owner's quote showed TipMe paying. Refused, so the
+  // Ruling R6: staff end the waiver after the owner's quote showed TipMe paying. Refused, so the
   // business is never charged a fee its owner didn't see.
-  await db.transaction((tx) =>
-    setFeatureSwitch(tx, {
-      key: 'business_payout_fee_absorbed',
-      on: false,
-      staffUserId: OWNER,
-      approvedBy: null,
-      reason: 'Switched back for the user-pays test',
-      now: new Date(),
-    }),
-  );
+  await waiveFee(database, {
+    scope: 'kind',
+    kind: 'business',
+    payer: 'account',
+  });
   await assert.rejects(request('tipme'), { code: 'WITHDRAWAL_FEE_CHANGED' });
   assert.equal(await request('user'), 'user');
+});
+
+test('a business under its own withdrawal waiver pays no fee', async (t) => {
+  const { database, businessId, feePayerOf, request, payout } =
+    await businessSetup(t);
+  assert.equal(await feePayerOf(), 'user');
+  // An account rule for this business alone (spec 2026-11-23 §4): TipMe pays its fee.
+  const rule = await waiveFee(database, {
+    scope: 'account',
+    kind: 'business',
+    businessId,
+  });
+  assert.equal(await feePayerOf(), 'tipme');
+  assert.deepEqual(await payout(await request('tipme')), {
+    fee_payer: 'tipme',
+    fee: '0',
+    fee_waiver_id: rule,
+    waived: '5000',
+    amount: '400000',
+  });
+});
+
+test('a business that opts out of a kind-wide withdrawal waiver pays the fee again', async (t) => {
+  const { database, businessId, feePayerOf, request, payout } =
+    await businessSetup(t);
+  await waiveFee(database, { scope: 'kind', kind: 'business' });
+  assert.equal(await feePayerOf(), 'tipme');
+  // "Normal rules" for this business: the account pays, whatever the kind says.
+  await waiveFee(database, {
+    scope: 'account',
+    kind: 'business',
+    businessId,
+    payer: 'account',
+  });
+  assert.equal(await feePayerOf(), 'user');
+  await assert.rejects(request('tipme'), { code: 'WITHDRAWAL_FEE_CHANGED' });
+  assert.deepEqual(await payout(await request('user')), {
+    fee_payer: 'user',
+    fee: '5000',
+    fee_waiver_id: null,
+    waived: '0',
+    amount: '395000',
+  });
+});
+
+// Fee waivers (spec 2026-11-23 §4, W8; profit guards' "a waiver still makes TipMe pay"): a
+// withdrawal waiver in force overrides the person-pays default on every withdrawal. Only a fee the
+// person would have paid counts as waived; an unused top-up paying it anyway waives nothing.
+const tobiWaiver = (s, payer = 'tipme') =>
+  waiveFee(s.database, {
+    scope: 'account',
+    kind: 'individual',
+    profileId: TOBI.id,
+    payer,
+  });
+const waivedOf = async (s, payoutId) => {
+  const row = await s.payout(payoutId);
+  return {
+    fee_payer: row.fee_payer,
+    fee: row.user_fee_minor,
+    fee_waiver_id: row.fee_waiver_id,
+    waived: row.waived_fee_minor,
+    amount: row.amount_minor,
+  };
+};
+
+test('a person under a withdrawal waiver pays no fee, on every withdrawal of the day', async (t) => {
+  const s = await setup(t);
+  await s.tip();
+  const provider = partner();
+  const rule = await tobiWaiver(s);
+  const shown = await s.quote(provider);
+  assert.equal(shown.feePaidBy, 'tipme');
+  for (let n = 0; n < 3; n += 1) {
+    const { payoutId } = await s.withdraw(provider, 200_000n, {
+      feePaidBy: 'tipme',
+    });
+    assert.deepEqual(await waivedOf(s, payoutId), {
+      fee_payer: 'tipme',
+      fee: '0',
+      fee_waiver_id: rule,
+      waived: '5000',
+      amount: '200000',
+    });
+  }
+});
+
+test('a kind-wide withdrawal waiver reaches the person; opting out brings the fee back', async (t) => {
+  const s = await setup(t);
+  await s.tip();
+  const provider = partner();
+  assert.equal((await s.quote(provider)).feePaidBy, 'user');
+  await waiveFee(s.database, { scope: 'kind', kind: 'individual' });
+  assert.equal((await s.quote(provider)).feePaidBy, 'tipme');
+  // Tobi opted out of it ("normal rules"): the person pays again.
+  await tobiWaiver(s, 'account');
+  assert.equal((await s.quote(provider)).feePaidBy, 'user');
+  const { payoutId } = await s.withdraw(provider, 200_000n, {
+    feePaidBy: 'user',
+  });
+  assert.deepEqual(await waivedOf(s, payoutId), {
+    fee_payer: 'user',
+    fee: '5000',
+    fee_waiver_id: null,
+    waived: '0',
+    amount: '195000',
+  });
+});
+
+test('a waiver ending, or starting, after the quote is refused, and nothing is recorded', async (t) => {
+  const s = await setup(t);
+  await s.tip();
+  const provider = partner();
+  await tobiWaiver(s);
+  assert.equal((await s.quote(provider)).feePaidBy, 'tipme');
+  // The waiver ends (Tobi follows the kind: none), so the default is back: the person pays.
+  await tobiWaiver(s, 'inherit');
+  const before = await payoutCount(s);
+  assert.equal(
+    await s.codeOf(s.withdraw(provider, 200_000n, { feePaidBy: 'tipme' })),
+    'WITHDRAWAL_FEE_CHANGED',
+  );
+  assert.equal(await payoutCount(s), before);
+  assert.equal((await s.quote(provider)).feePaidBy, 'user');
+  // And the other way: a waiver starting after a quote that showed the fee.
+  await tobiWaiver(s);
+  assert.equal(
+    await s.codeOf(s.withdraw(provider, 200_000n, { feePaidBy: 'user' })),
+    'WITHDRAWAL_FEE_CHANGED',
+  );
+  assert.equal(await payoutCount(s), before);
+});
+
+test('a waived withdrawal an unused top-up pays anyway costs the waiver nothing', async (t) => {
+  const s = await setup(t);
+  await s.tip();
+  const provider = partner();
+  await leftoverTopUp(s, provider);
+  const rule = await tobiWaiver(s);
+  const { payoutId } = await s.withdraw(provider, 200_000n, {
+    feePaidBy: 'tipme',
+  });
+  assert.deepEqual(await waivedOf(s, payoutId), {
+    fee_payer: 'tipme',
+    fee: '0',
+    fee_waiver_id: rule,
+    waived: '0',
+    amount: '200000',
+  });
 });

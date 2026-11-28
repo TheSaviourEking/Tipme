@@ -10010,6 +10010,20 @@ body:has(
   margin-bottom: var(--space-4);
 }
 
+/* Fee waivers (spec 2026-11-23 §7): the dashboard's "TipMe is covering the fee" slip, and the tip
+   receipt's line under its fee row. Existing tokens only. */
+.fee-waiver-slip {
+  margin-bottom: var(--space-4);
+}
+
+.receipt .rrow__note {
+  display: block;
+  margin-top: var(--space-1);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  line-height: 1.45;
+}
+
 /* Task 15 fix round 2: the plain line above the bank form after support changed their name. */
 .collect-bank__recheck {
   margin: 0 0 var(--space-3);

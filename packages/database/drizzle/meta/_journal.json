@@ -911,6 +911,34 @@
       "when": 1795675411313,
       "tag": "0129_card_cost_settings",
       "breakpoints": true
+    },
+    {
+      "idx": 130,
+      "version": "7",
+      "when": 1795823177301,
+      "tag": "0130_fee_waivers",
+      "breakpoints": true
+    },
+    {
+      "idx": 131,
+      "version": "7",
+      "when": 1795823190820,
+      "tag": "0131_fee_waiver_carry_over",
+      "breakpoints": true
+    },
+    {
+      "idx": 132,
+      "version": "7",
+      "when": 1795823192149,
+      "tag": "0132_fee_waiver_issues",
+      "breakpoints": true
+    },
+    {
+      "idx": 133,
+      "version": "7",
+      "when": 1795823193516,
+      "tag": "0133_fee_waiver_account_notices",
+      "breakpoints": true
     }
   ]
 }

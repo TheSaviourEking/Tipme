@@ -5,7 +5,6 @@ import {
   balanceOf,
   businessBalanceOf,
   businessWithdrawalQuote,
-  setFeatureSwitch,
   createPaymentIntent,
   createQuote,
   DEMO_PROFILES,
@@ -30,7 +29,7 @@ import {
   seedManager,
   seedMember,
 } from './business-fixtures.mjs';
-import { useDatabase } from './helpers.mjs';
+import { useDatabase, waiveFee } from './helpers.mjs';
 
 // Business release 2, PR R2-B: a business's own balance (its business_payable, from shares) and
 // its owners' withdrawals of it, through exactly a person's balance-based withdrawal path.
@@ -893,57 +892,71 @@ test('a business balance and its withdrawals', async (t) => {
       );
     },
   );
+  // Fee waivers (spec 2026-11-23 §5) replace the `business_payout_fee_absorbed` switch: the
+  // migration carried its value over as the business kind rule for the withdrawal fee.
   await t.test(
-    'business withdrawals keep today’s rule unless staff switch on TipMe paying their fee (owner, 18 Nov 2026)',
+    'a business under the kind rule (carried over as TipMe pays) receives the whole amount; under payer account it pays from the amount',
     async () => {
-      const switchTo = (on) =>
-        db.transaction((tx) =>
-          setFeatureSwitch(tx, {
-            key: 'business_payout_fee_absorbed',
-            on,
-            staffUserId: OWNER,
-            approvedBy: null,
-            reason: 'Switched for the business payout fee test',
-            now: new Date(),
-          }),
-        );
+      const kindRule = (payer) =>
+        waiveFee(database, { scope: 'kind', kind: 'business', payer });
       const sentAndFee = (payoutId) =>
         q(
-          `SELECT amount_minor::text AS sent, user_fee_minor::text AS fee, fee_payer
+          `SELECT amount_minor::text AS sent, user_fee_minor::text AS fee, fee_payer,
+                  fee_waiver_id, waived_fee_minor::text AS waived
              FROM payouts WHERE id = $1`,
           [payoutId],
         );
+      const quoted = async () =>
+        (
+          await businessWithdrawalQuote(db, {
+            businessId: shared.businessId,
+            userId: OWNER,
+            providers: { active: provider(), withdrawOnly: [] },
+          })
+        ).feePaidBy;
       await database.fresh();
       const shared = await atBusiness();
       await paidTip(shared);
-      // Off by default: the business pays the ₦50 from the amount, as since 12 Nov 2026.
-      const before = await businessWithdrawalQuote(db, {
-        businessId: shared.businessId,
-        userId: OWNER,
-        providers: { active: provider(), withdrawOnly: [] },
+      // The reset's carried-over rule says the business pays (the switch was off): ₦50 comes off.
+      const [carried] = await q(
+        `SELECT payer, reason FROM fee_waivers WHERE scope = 'kind' AND kind = 'business'`,
+      );
+      assert.deepEqual(carried, {
+        payer: 'account',
+        reason: 'Carried over from the switch',
       });
-      assert.equal(before.feePaidBy, 'user');
+      assert.equal(await quoted(), 'user');
       const paysItself = await withdraw(shared.businessId, 500000n);
       assert.deepEqual(await sentAndFee(paysItself.payoutId), [
-        { sent: '495000', fee: '5000', fee_payer: 'user' },
+        {
+          sent: '495000',
+          fee: '5000',
+          fee_payer: 'user',
+          fee_waiver_id: null,
+          waived: '0',
+        },
       ]);
-      // On: TipMe pays it, the whole amount is sent; the payout asked for before keeps its terms.
-      await switchTo(true);
-      const after = await businessWithdrawalQuote(db, {
-        businessId: shared.businessId,
-        userId: OWNER,
-        providers: { active: provider(), withdrawOnly: [] },
-      });
-      assert.equal(after.feePaidBy, 'tipme');
+      // TipMe pays (what the carry-over writes when the switch was on): the whole amount is sent,
+      // and the payout asked for before keeps its terms.
+      const tipmePays = await kindRule('tipme');
+      assert.equal(await quoted(), 'tipme');
       const absorbed = await withdraw(shared.businessId, 500000n);
       assert.deepEqual(await sentAndFee(absorbed.payoutId), [
-        { sent: '500000', fee: '0', fee_payer: 'tipme' },
+        {
+          sent: '500000',
+          fee: '0',
+          fee_payer: 'tipme',
+          fee_waiver_id: tipmePays,
+          waived: '5000',
+        },
       ]);
-      assert.deepEqual(await sentAndFee(paysItself.payoutId), [
-        { sent: '495000', fee: '5000', fee_payer: 'user' },
-      ]);
-      // Off again: back to the business paying.
-      await switchTo(false);
+      assert.equal(
+        (await sentAndFee(paysItself.payoutId))[0].fee_payer,
+        'user',
+      );
+      // Back to payer account: the business pays again.
+      await kindRule('account');
+      assert.equal(await quoted(), 'user');
       const again = await withdraw(shared.businessId, 500000n);
       assert.equal((await sentAndFee(again.payoutId))[0].fee_payer, 'user');
       await assertBalanced();
