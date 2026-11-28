@@ -1,10 +1,11 @@
 /**
  * Page Studio styles (spec 2026-11-17-page-studio-styles, §5.1, §7.3, §9).
  *
- * A page picks one of nine finished styles and one of eight tested accents; it never stores a
- * colour. This registry holds only what the API, the design check and the editor must know: each
- * style's neutrals per mode, its defaults, and the accent table. Radii, type sizes, spacing and
- * motion live in each style's CSS. Every value is copied from the spec (which copies the canvas);
+ * A page picks one of eleven finished styles (the canvas's nine, then Creator and Professional
+ * from the addendum 2026-11-27-studio-creator-professional-design) and one of eight tested
+ * accents; it never stores a colour. This registry holds only what the API, the design check and
+ * the editor must know: each style's neutrals per mode, its defaults, and the accent table. Radii,
+ * type sizes, spacing and motion live in each style's CSS. Every value is copied from the spec (which copies the canvas);
  * the exhaustive contrast test proves every style × accent × mode pair.
  */
 
@@ -31,6 +32,9 @@ export const STUDIO_STYLE_IDS = [
   'tiles',
   'linen',
   'horizon',
+  // Addendum §5.1: appended, so every existing card position and fixture order stays.
+  'creator',
+  'professional',
 ] as const;
 export type StudioStyleId = (typeof STUDIO_STYLE_IDS)[number];
 
@@ -104,7 +108,10 @@ export const STUDIO_ACCENTS: Record<
   },
 };
 
-/** Classic's default (`accent: null`): today's purple, and the canvas's derived dark (§7.3, §9.1). */
+/**
+ * The default for `accent: null` (Classic, Creator): today's purple, and the canvas's derived dark
+ * (§7.3, §9.1).
+ */
 export const CLASSIC_PURPLE: { name: 'TipMe purple' } & ModePair = {
   name: 'TipMe purple',
   light: { fill: '#7a32f9', label: '#ffffff', text: '#7a32f9' },
@@ -137,13 +144,13 @@ export interface StudioStyle {
   plan: 'free' | 'pro';
   /** null: Inter only. */
   displayFont: StudioFontId | null;
-  /** null: Classic (today's purple). */
+  /** null: TipMe purple (Classic, Creator). */
   defaultAccent: StudioCuratedAccentId | null;
   naturalMode: 'light' | 'dark';
   modes: readonly StudioMode[];
   /** UI order; 'yours' first. Signboard and Sprint offer no gradient. */
   covers: readonly StudioCoverType[];
-  /** Stage, Horizon: a non-photo cover renders the gradient treatment. */
+  /** Stage, Horizon, Creator: a non-photo cover renders the gradient treatment. */
   needsPhoto: boolean;
   /** Where the fixed profile links sit on phone (§8). */
   linksAt: 'after-identity' | 'after-tip' | 'rail';
@@ -480,6 +487,80 @@ export const STUDIO_STYLES: Record<StudioStyleId, StudioStyle> = {
       },
     },
   },
+  // Addendum §7.1 and §5.2. Every surface sits inside the photo-accent envelope (§5.2; the
+  // contracts test asserts it). `control` is the chip border, 3:1 on bg and card.
+  creator: {
+    id: 'creator',
+    name: 'Creator',
+    mood: 'Bold, personal, made to be shared',
+    plan: 'pro',
+    displayFont: null,
+    // null: TipMe purple (§6.1).
+    defaultAccent: null,
+    naturalMode: 'dark',
+    modes: MODES,
+    covers: ALL_COVERS,
+    needsPhoto: true,
+    // The icon row under the bio (§7.4).
+    linksAt: 'after-identity',
+    neutrals: {
+      light: {
+        bg: '#f7f5fc',
+        card: '#ffffff',
+        el2: '#eeeaf6',
+        fg: '#17131f',
+        fg2: '#5f5970',
+        line: '#e2ddec',
+        control: '#8f889e',
+      },
+      dark: {
+        bg: '#0e0b16',
+        card: '#1a1626',
+        el2: '#262033',
+        fg: '#f5f3fa',
+        fg2: '#aba5ba',
+        line: '#2e2840',
+        control: '#6e6780',
+      },
+    },
+  },
+  // Addendum §7.2 and §5.2. `card` is the card rising over the cover; `row` the link rows and
+  // chips inside it (3:1 for `control` on it too).
+  professional: {
+    id: 'professional',
+    name: 'Professional',
+    mood: 'Clean, composed, easy to trust',
+    plan: 'pro',
+    displayFont: null,
+    defaultAccent: 'ink',
+    naturalMode: 'light',
+    modes: MODES,
+    covers: ALL_COVERS,
+    needsPhoto: false,
+    linksAt: 'after-identity',
+    neutrals: {
+      light: {
+        bg: '#f2efea',
+        card: '#faf8f4',
+        el2: '#ece8e1',
+        fg: '#16151a',
+        fg2: '#5e5b63',
+        line: '#e4dfd6',
+        control: '#8a857d',
+        row: '#ffffff',
+      },
+      dark: {
+        bg: '#0f0f11',
+        card: '#18181b',
+        el2: '#2a2a2f',
+        fg: '#f4f4f6',
+        fg2: '#a6a6ae',
+        line: '#2e2e33',
+        control: '#6c6c74',
+        row: '#202024',
+      },
+    },
+  },
 };
 
 export const STUDIO_FREE_STYLES: readonly StudioStyleId[] =
@@ -489,7 +570,8 @@ export const STUDIO_FREE_STYLES: readonly StudioStyleId[] =
 type PhotoAccent = PhotoAccentValues | PhotoAccentFailed;
 
 /**
- * The accent values a page uses. `null` is the style's default (TipMe purple on Classic).
+ * The accent values a page uses. `null` is the style's default (TipMe purple on Classic and
+ * Creator).
  * `'photo'` takes the photo's values, or the curated accent it fell back to (§6 step 5); without
  * a photo accent (none computed yet, or the avatar was removed) it is the default too, so a page
  * always renders with a tested accent.
@@ -555,6 +637,42 @@ export const STUDIO_TILES_TILE_FOCUS = (a: StudioAccentValues): Hex => a.label;
 export const STUDIO_TILES_RING_MIX = 0.64;
 const tilesRing = (a: StudioAccentValues) =>
   blend(a.label, STUDIO_TILES_RING_MIX, a.fill);
+
+/**
+ * Creator's Tip (addendum §6.1): the accent's light pair in both modes, so the dark page keeps the
+ * saturated button with its light label, already proven at 4.5:1. Except where the light pair is
+ * Ink's (near-black, 1.16:1 on Creator's dark bg): there the dark pair. Compared by value, so a
+ * photo accent stored as failed with Ink as its fallback takes the exception too.
+ */
+export function studioDeep(
+  light: StudioAccentValues,
+  dark: StudioAccentValues,
+  mode: 'light' | 'dark',
+): { fill: Hex; label: Hex } {
+  const ink = STUDIO_ACCENTS.ink.light;
+  const inkLight = light.fill === ink.fill && light.label === ink.label;
+  const pair = mode === 'dark' && inkLight ? dark : light;
+  return { fill: pair.fill, label: pair.label };
+}
+
+/**
+ * The OKLCH lightness the Tip's vertical sheen drops at its lower end (addendum §6.1: 0 to 0.06,
+ * builder's call). 0.04 is a visible sheen with room under the cap; the board may tune it. Both
+ * ends keep `deepLabel` at 4.5:1, proven in `studioContrastPairs` (Amber and Ink dark, the dark
+ * labels, are the ends it narrows).
+ */
+export const STUDIO_DEEP_SHEEN = 0.04;
+const sheenEnd = (fill: Hex): Hex => {
+  const { l, c, h } = hexToOklch(fill);
+  return oklchToHex({ l: l - STUDIO_DEEP_SHEEN, c, h });
+};
+
+/**
+ * The opacity of the Tip's second line ("Give, tip or appreciate") over `deep`. Ruling P2 of the
+ * Creator plan: full opacity, because 85% measured under 4.5:1 for Green and Coral; its pair is
+ * proven at this value, so any later change is proven too.
+ */
+const SECOND_LINE_OPACITY = 1;
 
 export interface StudioContrastPair {
   name: string;
@@ -671,6 +789,43 @@ export function studioContrastPairs(
       chipBorder(n.control as Hex);
       add('selected ring (accText) on bg', accText, n.bg, 3);
       break;
+    case 'creator': {
+      chipBorder(n.control as Hex);
+      // Chips sit on card; the icon row's badges on el2 circles (addendum §7.1).
+      add('chip label (fg) on card', n.fg, n.card, 4.5);
+      add('selected ring (accText) on card', accText, n.card, 3);
+      add('icon badge (fg) on el2', n.fg, n.el2, 4.5);
+      // The Tip draws the light pair (studioDeep). With one mode's values only, the light pass
+      // proves it; the dark pass only when these are Ink's dark values (the exception), so it
+      // never proves a pair the page doesn't draw (addendum §6.1).
+      const ink = STUDIO_ACCENTS.ink.dark;
+      if (
+        mode === 'light' ||
+        (accent.fill === ink.fill && accent.label === ink.label)
+      ) {
+        const second = blend(accLabel, SECOND_LINE_OPACITY, acc);
+        for (const [end, bg] of [
+          ['', acc],
+          [' (sheen end)', sheenEnd(acc)],
+        ] as const) {
+          add(`deepLabel on deep${end}`, accLabel, bg, 4.5);
+          add(`second line on deep${end}`, second, bg, 4.5);
+        }
+      }
+      break;
+    }
+    case 'professional': {
+      const row = n.row as Hex;
+      chipBorder(n.control as Hex);
+      // Link rows and chips sit on `row` inside the card (addendum §7.2).
+      add('fg on row', n.fg, row, 4.5);
+      add('fg2 on row', n.fg2, row, 4.5);
+      add('accText on row', accText, row, 4.5);
+      add('unselected chip border on row', n.control as Hex, row, 3);
+      add('selected border (accText) on row', accText, row, 3);
+      add('icon badge (fg) on el2', n.fg, n.el2, 4.5);
+      break;
+    }
   }
   return pairs;
 }
@@ -681,7 +836,8 @@ export type StudioTokenMap = Record<string, string>;
 /**
  * Both modes' tokens for a page: the style's neutrals (extras included), the accent's three
  * values as `acc`, `accLabel` and `accText`, `bar` (bg at 85%), and the derived tokens a style
- * names in §9 (`chipOn` for Journal and Linen, Stage's `glow`, Tiles' `tileFocus`).
+ * names in §9 (`chipOn` for Journal and Linen, Stage's `glow`, Tiles' `tileFocus`), and Creator's
+ * Tip (`deep`, `deepEnd` the sheen's lower end, `deepLabel`; addendum §6.1).
  */
 export function studioTokens(
   style: StudioStyleId,
@@ -701,6 +857,16 @@ export function studioTokens(
     if (CHIP_ON_STYLES.includes(style)) t.chipOn = chipOn(a.fill, n.bg, mode);
     if (style === 'tiles') t.tileFocus = STUDIO_TILES_TILE_FOCUS(a);
     if (style === 'stage') t.glow = mode === 'dark' ? a.fill : 'none';
+    if (style === 'creator') {
+      const deep = studioDeep(
+        accentValues(style, accent, 'light', photo),
+        accentValues(style, accent, 'dark', photo),
+        mode,
+      );
+      t.deep = deep.fill;
+      t.deepEnd = sheenEnd(deep.fill);
+      t.deepLabel = deep.label;
+    }
     return t;
   };
   return { light: forMode('light'), dark: forMode('dark') };

@@ -40,9 +40,11 @@ test('no style component renders raw HTML or builds a style from user content', 
     [
       'sheets/classic.tsx',
       'sheets/clear.tsx',
+      'sheets/creator.tsx',
       'sheets/horizon.tsx',
       'sheets/journal.tsx',
       'sheets/linen.tsx',
+      'sheets/professional.tsx',
       'sheets/signboard.tsx',
       'sheets/sprint.tsx',
       'sheets/stage.tsx',
@@ -58,7 +60,13 @@ test('no style component renders raw HTML or builds a style from user content', 
   assert.match(readStyle('sheets/linen.tsx'), /return null;/);
   assert.match(readStyle('sheets/stage.tsx'), /return null;/);
   assert.match(readStyle('sheets/horizon.tsx'), /return null;/);
-  for (const style of ['signboard', 'sprint', 'tiles'])
+  for (const style of [
+    'signboard',
+    'sprint',
+    'tiles',
+    'creator',
+    'professional',
+  ])
     assert.match(readStyle(`sheets/${style}.tsx`), /return null;/, style);
 });
 
@@ -78,6 +86,11 @@ const topLevel = (list) => {
   return [...out, list.slice(start).trim()];
 };
 
+// Creator and Professional's sheets are stubs until their renderers land (Creator plan ruling P1,
+// Tasks 3 and 4, which take each off this list). A stub holds no rule at all, so nothing unscoped
+// can hide behind it.
+const STUB_SHEETS = ['creator.css', 'professional.css'];
+
 test('every style rule is scoped to a styled Studio page', () => {
   for (const file of styleFiles.filter((f) => f.endsWith('.css'))) {
     const selectors = [
@@ -96,6 +109,10 @@ test('every style rule is scoped to a styled Studio page', () => {
       )
       // A rule wrapped whole in `:where()` (to carry no specificity) is still scoped to the page.
       .map((s) => s.replace(/^:where\((\.studio\[data-style)/, '$1'));
+    if (STUB_SHEETS.includes(file)) {
+      assert.deepEqual(selectors, [], `${file} is a stub`);
+      continue;
+    }
     assert.ok(selectors.length > 10, `${file} has its rules`);
     const own = file === 'frame.css' ? '' : file.replace('.css', '');
     for (const s of selectors)

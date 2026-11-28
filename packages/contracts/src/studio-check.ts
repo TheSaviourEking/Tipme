@@ -174,6 +174,9 @@ interface Desktop {
   bleed?: true;
 }
 
+/** Creator's photo strip: 156 px tiles at every width, Stage's numbers (ruling P3). */
+const CREATOR_STRIP_TILE = 156;
+
 // Classic's widths follow the screen (classicSlot, below).
 const DESKTOP: Record<Exclude<StudioStyleId, 'classic'>, Desktop> = {
   // Content 920, a 2-column grid with a 40 px gap; photos 3-up squares in the 440 column, gap 8.
@@ -196,6 +199,11 @@ const DESKTOP: Record<Exclude<StudioStyleId, 'classic'>, Desktop> = {
   // Content 1040: 440 px, gap 80, the right column (520), where every block sits (builder's
   // call); photos 3-up, gap 16.
   horizon: { text: 520, media: 520, list: 520, tile: 163 },
+  // Creator plan ruling P3 (addendum §7.1): content 1040, a 420 px column, gap 80, the main column
+  // (540) for every block; a gallery photo is a 156 px strip tile at every width.
+  creator: { text: 540, media: 540, list: 540, tile: CREATOR_STRIP_TILE },
+  // Ruling P3 (§7.2): below the card, blocks in one 640 column; photos 3-up, gap 8.
+  professional: { text: 640, media: 640, list: 640, tile: 208 },
 };
 
 /**
@@ -276,11 +284,13 @@ export function studioSlotWidth(
   if (kind !== 'gallery') return column;
   // One gallery photo on a phone or tablet: Clear's and Stage's strips of fixed tiles (§9.2,
   // §9.4), Journal 3-up (gap 6), Horizon and Signboard 3-up (gap 8), Tiles 2-up (gap 12, an odd
-  // last photo spanning both: the column), Linen 3fr/2fr (gap 8, the larger).
+  // last photo spanning both: the column), Linen 3fr/2fr (gap 8, the larger). Creator's strip of
+  // fixed tiles and Professional 3-up (gap 8), ruling P3.
   if (style === 'clear') return CLEAR_STRIP_TILE;
   if (style === 'stage') return STAGE_STRIP_TILE;
+  if (style === 'creator') return CREATOR_STRIP_TILE;
   if (style === 'journal') return Math.round((column - 12) / 3);
-  if (style === 'horizon' || style === 'signboard')
+  if (style === 'horizon' || style === 'signboard' || style === 'professional')
     return Math.round((column - 16) / 3);
   if (style === 'tiles') return column;
   return Math.round(((column - 8) * 3) / 5);
@@ -308,7 +318,8 @@ const number = (n: number) =>
  * Kept in step with each style's CSS (apps/web/src/components/studio-styles/<style>.css; apps/web
  * test studio-style-page holds them): Clear's phone section title is 20/26 (§9.2), Journal's
  * 22/29 (§9.3), Stage's 22/28 (§9.4), Signboard's 15/22 caps (§9.5), Sprint's 20/26 (§9.6),
- * Tiles' 15/20 (its text tile title, §9.7), Linen's 24/30 (§9.8), Horizon's 18/24 (§9.9).
+ * Tiles' 15/20 (its text tile title, §9.7), Linen's 24/30 (§9.8), Horizon's 18/24 (§9.9),
+ * Creator's 20/26 and Professional's 18/24 (addendum §7.1, §7.2; ruling P3).
  */
 export const STUDIO_HEADING_PX: Record<StudioStyleId, number> = {
   // classic.css .studio-title: 2rem at every width (apps/web test studio-classic holds it).
@@ -321,6 +332,8 @@ export const STUDIO_HEADING_PX: Record<StudioStyleId, number> = {
   tiles: 15,
   linen: 24,
   horizon: 18,
+  creator: 20,
+  professional: 18,
 };
 
 function copy(doc: StudioDocument): StudioDocument {

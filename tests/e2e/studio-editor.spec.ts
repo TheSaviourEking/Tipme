@@ -4,7 +4,7 @@ import { sql } from './ops-helpers';
 import { API_ORIGIN, WEB_ORIGIN } from './stack';
 
 // Page Studio editor on v2 (styles plan Task 12, PR 4a; spec §10): the Style tab. Every page edits:
-// Free picks the free styles and Pro all nine, with an accent, an appearance and a cover type, and
+// Free picks the free styles and Pro all eleven, with an accent, an appearance and a cover type, and
 // the preview (the real renderer, in its own frame) follows. Free sees the Pro styles marked and
 // can choose them as a preview that isn't saved (§12.4; studio-free-preview.spec.ts). The
 // `page_studio` switch is on in the e2e stack; "off" is the API's own 404, played here so nothing
@@ -104,7 +104,7 @@ test('a Pro person picks Stage, Rose and Dark, and the preview shows it', async 
   await page.waitForURL(/\/dashboard\/studio$/);
   await expect(cards(page)).toBeVisible();
   // Pro: every card can be chosen, and none says PRO.
-  await expect(page.getByText('9 styles')).toBeVisible();
+  await expect(page.getByText('11 styles')).toBeVisible();
   await expect(cards(page).getByText('PRO', { exact: true })).toHaveCount(0);
   await expect(card(page, 'Classic')).toHaveAttribute('aria-checked', 'true');
 
@@ -155,7 +155,7 @@ test('a Free person picks Journal and Green and it saves @mobile', async ({
     .getByRole('link', { name: 'Design your page' })
     .click();
   await expect(cards(page)).toBeVisible();
-  await expect(page.getByText('4 of 9 free')).toBeVisible();
+  await expect(page.getByText('4 of 11 free')).toBeVisible();
   // Green is Journal's own accent, so it is chosen on Classic first: a picked accent stays picked
   // across styles (§10), where Journal's own would be stored as no accent at all.
   await swatch(page, 'Green').click();
@@ -169,14 +169,14 @@ test('a Free person picks Journal and Green and it saves @mobile', async ({
   expect(await fitsViewport(page)).toBe(true);
 });
 
-test('Free sees PRO on five cards, the banner "PRO · Stage, Signboard, Sprint, Tiles and Horizon come with Pro.", and can choose them to preview', async ({
+test('Free sees PRO on seven cards, the banner "PRO · Stage, Signboard, Sprint, Tiles, Horizon, Creator and Professional come with Pro.", and can choose them to preview', async ({
   page,
 }, testInfo) => {
   await signUpRecipient(page, testInfo, { live: false });
   await openEditor(page);
-  await expect(cards(page).getByText('PRO', { exact: true })).toHaveCount(5);
+  await expect(cards(page).getByText('PRO', { exact: true })).toHaveCount(7);
   const banner = page.getByRole('link', {
-    name: 'PRO · Stage, Signboard, Sprint, Tiles and Horizon come with Pro.',
+    name: 'PRO · Stage, Signboard, Sprint, Tiles, Horizon, Creator and Professional come with Pro.',
   });
   await expect(banner).toHaveAttribute('href', '/pro');
   // Every card is a real radio, Pro ones included (§12.4 overrides the canvas's aria-disabled).
@@ -186,6 +186,8 @@ test('Free sees PRO on five cards, the banner "PRO · Stage, Signboard, Sprint, 
     'Sprint',
     'Tiles',
     'Horizon',
+    'Creator',
+    'Professional',
     'Clear',
   ])
     await expect(card(page, name)).not.toHaveAttribute('aria-disabled', 'true');
@@ -212,8 +214,11 @@ test('Free sees PRO on five cards, the banner "PRO · Stage, Signboard, Sprint, 
   await expect(card(page, 'Stage')).toBeFocused();
   await expect(card(page, 'Stage')).toHaveAttribute('aria-checked', 'true');
   await page.keyboard.press('End');
-  await expect(card(page, 'Horizon')).toBeFocused();
-  await expect(card(page, 'Horizon')).toHaveAttribute('aria-checked', 'true');
+  await expect(card(page, 'Professional')).toBeFocused();
+  await expect(card(page, 'Professional')).toHaveAttribute(
+    'aria-checked',
+    'true',
+  );
   await page.keyboard.press('ArrowRight');
   await expect(card(page, 'Classic')).toBeFocused();
   await expect(card(page, 'Classic')).toHaveAttribute('aria-checked', 'true');

@@ -51,7 +51,7 @@ export function withStyle(
   return { ...doc, style, cover };
 }
 
-/** The document with this accent; null is the style's own (TipMe purple on Classic, §9.1). */
+/** The document with this accent; null is the style's own (TipMe purple on Classic and Creator). */
 export function withAccent(
   doc: StudioDocument,
   accent: StudioAccentId | null,
@@ -69,7 +69,7 @@ export const withCover = (
   cover: StudioCoverType,
 ): StudioDocument => ({ ...doc, cover });
 
-/** One accent swatch. `value` null is TipMe purple (Classic's own, stored as no accent). */
+/** One accent swatch. `value` null is TipMe purple (Classic's and Creator's own, stored as none). */
 export interface AccentChoice {
   value: StudioAccentId | null;
   /** The swatch's accessible name. */
@@ -81,8 +81,9 @@ export interface AccentChoice {
 }
 
 /**
- * The swatches in order (§10.3): TipMe purple first on Classic only (owner, 17 Nov), the eight
- * curated accents, then "From your photo", which is Pro and needs a profile photo.
+ * The swatches in order (§10.3): TipMe purple first on every style whose own accent it is (a null
+ * `defaultAccent`: Classic, owner 17 Nov; Creator, addendum §5.1), the eight curated accents, then
+ * "From your photo", which is Pro and needs a profile photo.
  */
 export function accentChoices(
   style: StudioStyleId,
@@ -98,7 +99,7 @@ export function accentChoices(
     disabled: false,
   }));
   return [
-    ...(style === 'classic'
+    ...(STUDIO_STYLES[style].defaultAccent === null
       ? [
           {
             value: null,
@@ -120,7 +121,7 @@ export function accentChoices(
 
 /**
  * The swatch shown selected: the stored accent, or the style's own while none is picked. Null is
- * TipMe purple (Classic).
+ * TipMe purple (Classic, Creator).
  */
 export function selectedAccent(doc: StudioDocument): StudioAccentId | null {
   return doc.accent ?? STUDIO_STYLES[doc.style].defaultAccent;
@@ -155,7 +156,7 @@ export function styleCardLabel(style: StudioStyleId): string {
   return `${s.name}, ${s.mood}. ${plan}.${style === 'classic' ? ' The default.' : ''}`;
 }
 
-/** Beside "Style": "4 of 9 free" on Free, "9 styles" on Pro (§10.2). */
+/** Beside "Style": "4 of 11 free" on Free, "11 styles" on Pro (§10.2). */
 export function styleHeading(plan: Plan): string {
   const all = STUDIO_STYLE_IDS.length;
   return plan === 'pro'

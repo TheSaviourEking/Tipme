@@ -7,10 +7,13 @@ import {
   STUDIO_FREE_STYLES,
   STUDIO_STYLES,
   STUDIO_STYLE_IDS,
+  STUDIO_DEEP_SHEEN,
   STUDIO_TILES_RING_MIX,
   accentValues,
   blend,
   contrastRatio,
+  hexToOklch,
+  oklchToHex,
   studioContrastPairs,
   studioTokens,
 } from '../dist/index.js';
@@ -18,18 +21,22 @@ import {
 const CURATED = STUDIO_ACCENT_IDS.filter((id) => id !== 'photo');
 const MODES = ['light', 'dark'];
 
-test('nine styles in the canvas order; Classic, Clear, Journal and Linen are free', () => {
-  assert.deepEqual(STUDIO_STYLE_IDS, [
-    'classic',
-    'clear',
-    'journal',
-    'stage',
-    'signboard',
-    'sprint',
-    'tiles',
-    'linen',
-    'horizon',
-  ]);
+// The canvas's nine, in its order; Creator and Professional (addendum §5.1) follow them.
+const ORIGINAL_NINE = [
+  'classic',
+  'clear',
+  'journal',
+  'stage',
+  'signboard',
+  'sprint',
+  'tiles',
+  'linen',
+  'horizon',
+];
+const NEW_STYLES = ['creator', 'professional'];
+
+test('eleven styles: the canvas nine, then Creator and Professional; Classic, Clear, Journal and Linen are free', () => {
+  assert.deepEqual(STUDIO_STYLE_IDS, [...ORIGINAL_NINE, ...NEW_STYLES]);
   assert.deepEqual(STUDIO_ACCENT_IDS, [
     'ink',
     'blue',
@@ -72,6 +79,9 @@ test('each style opens differently (pass 2 defaults)', () => {
     tiles: 'rose',
     linen: 'coral',
     horizon: 'lagoon',
+    // null: TipMe purple (addendum §6.1).
+    creator: null,
+    professional: 'ink',
   });
   const faces = Object.fromEntries(
     STUDIO_STYLE_IDS.map((id) => [id, STUDIO_STYLES[id].displayFont]),
@@ -86,10 +96,16 @@ test('each style opens differently (pass 2 defaults)', () => {
     tiles: null,
     linen: 'linen-serif',
     horizon: null,
+    creator: null,
+    professional: null,
   });
   for (const id of STUDIO_STYLE_IDS) {
     const s = STUDIO_STYLES[id];
-    assert.equal(s.naturalMode, id === 'stage' ? 'dark' : 'light', id);
+    assert.equal(
+      s.naturalMode,
+      id === 'stage' || id === 'creator' ? 'dark' : 'light',
+      id,
+    );
     assert.deepEqual(s.modes, ['light', 'dark', 'auto'], id);
     assert.deepEqual(
       s.covers,
@@ -98,12 +114,30 @@ test('each style opens differently (pass 2 defaults)', () => {
         : ['yours', 'gradient', 'plain'],
       id,
     );
-    assert.equal(s.needsPhoto, id === 'stage' || id === 'horizon', id);
+    assert.equal(
+      s.needsPhoto,
+      id === 'stage' || id === 'horizon' || id === 'creator',
+      id,
+    );
     assert.ok(s.name.length > 0 && s.mood.length > 0, id);
   }
   assert.equal(STUDIO_STYLES.classic.mood, 'Today’s TipMe page, unchanged');
   assert.equal(STUDIO_STYLES.clear.mood, 'Quiet, bright, precise');
   assert.equal(STUDIO_STYLES.horizon.mood, 'One image, a quiet name');
+  for (const id of NEW_STYLES) {
+    assert.equal(STUDIO_STYLES[id].plan, 'pro', id);
+    assert.equal(STUDIO_STYLES[id].linksAt, 'after-identity', id);
+  }
+});
+
+test('Creator and Professional have the addendum’s names and moods', () => {
+  assert.equal(STUDIO_STYLES.creator.name, 'Creator');
+  assert.equal(STUDIO_STYLES.creator.mood, 'Bold, personal, made to be shared');
+  assert.equal(STUDIO_STYLES.professional.name, 'Professional');
+  assert.equal(
+    STUDIO_STYLES.professional.mood,
+    'Clean, composed, easy to trust',
+  );
 });
 
 test('the accent set is the canvas table', () => {
@@ -344,6 +378,31 @@ test('every style’s neutrals are the spec’s', () => {
     n('horizon', 'dark'),
     row('#111214', '#1c1d20', '#27282c', '#f2f3f5', '#a4a7ad', '#2d2e32'),
   );
+  // Addendum §5.2.
+  assert.deepEqual(
+    n('creator', 'dark'),
+    row('#0e0b16', '#1a1626', '#262033', '#f5f3fa', '#aba5ba', '#2e2840'),
+  );
+  assert.deepEqual(
+    n('creator', 'light'),
+    row('#f7f5fc', '#ffffff', '#eeeaf6', '#17131f', '#5f5970', '#e2ddec'),
+  );
+  assert.deepEqual(
+    n('professional', 'light'),
+    row('#f2efea', '#faf8f4', '#ece8e1', '#16151a', '#5e5b63', '#e4dfd6'),
+  );
+  assert.deepEqual(
+    n('professional', 'dark'),
+    row('#0f0f11', '#18181b', '#2a2a2f', '#f4f4f6', '#a6a6ae', '#2e2e33'),
+  );
+  assert.equal(STUDIO_STYLES.creator.neutrals.dark.control, '#6e6780');
+  assert.equal(STUDIO_STYLES.creator.neutrals.light.control, '#8f889e');
+  assert.equal(STUDIO_STYLES.professional.neutrals.light.control, '#8a857d');
+  assert.equal(STUDIO_STYLES.professional.neutrals.dark.control, '#6c6c74');
+  assert.equal(STUDIO_STYLES.professional.neutrals.light.row, '#ffffff');
+  assert.equal(STUDIO_STYLES.professional.neutrals.dark.row, '#202024');
+  assert.equal(STUDIO_STYLES.creator.neutrals.light.row, undefined);
+  assert.equal(STUDIO_STYLES.creator.neutrals.dark.row, undefined);
 
   // Dark mode never uses #000 surfaces (§4.2).
   for (const id of STUDIO_STYLE_IDS)
@@ -384,7 +443,8 @@ test('every style × accent × mode meets its contrast minimums (exhaustive)', (
           failures.push(`${style} · ${accent ?? 'default'} · ${mode} · ${f}`);
         combinations += 1;
       }
-  assert.equal(combinations, 162);
+  // 11 styles × (8 curated + the default) × 2 modes.
+  assert.equal(combinations, 198);
   assert.deepEqual(failures, []);
 });
 
@@ -396,6 +456,8 @@ test('every style but Classic proves its unselected chip border at 3:1', () => {
     sprint: ['#8e8e8e', '#696868'],
     linen: ['#948a7b', '#716961'],
     horizon: ['#8e8d8e', '#66686c'],
+    creator: ['#8f889e', '#6e6780'],
+    professional: ['#8a857d', '#6c6c74'],
   };
   for (const [id, [light, dark]] of Object.entries(controls)) {
     assert.equal(STUDIO_STYLES[id].neutrals.light.control, light, id);
@@ -603,4 +665,161 @@ test("Stage proves its chips on chip and on the desktop card's chipIn, in both m
       ])
         assert.ok(names.includes(name), `${accent} ${mode}: ${name}`);
     }
+});
+
+// Addendum §6.1: Creator's big Tip uses the accent's light pair in both modes, except where the
+// light pair is Ink's (a near-black button would vanish on the dark page): there the dark pair.
+test('deep tokens exist in both modes and follow the Ink exception by value', () => {
+  const blue = studioTokens('creator', 'blue');
+  assert.equal(blue.dark.deep, '#0a5bd3');
+  assert.equal(blue.dark.deepLabel, '#ffffff');
+  assert.equal(studioTokens('creator', null).dark.deep, '#7a32f9');
+  assert.equal(studioTokens('creator', null).dark.deepLabel, '#ffffff');
+  const ink = studioTokens('creator', 'ink');
+  assert.equal(ink.dark.deep, '#f2f2f4');
+  assert.equal(ink.dark.deepLabel, '#111113');
+  assert.equal(ink.light.deep, '#1d1d1f');
+  // "From your photo" stored as failed with Ink as its fallback resolves to Ink's values.
+  const failed = studioTokens('creator', 'photo', {
+    failed: true,
+    fallback: 'ink',
+  });
+  assert.equal(failed.dark.deep, '#f2f2f4');
+  assert.equal(failed.dark.deepLabel, '#111113');
+  const photo = {
+    light: { fill: '#a2461e', label: '#ffffff', text: '#a2461e' },
+    dark: { fill: '#f29a6b', label: '#140c08', text: '#f29a6b' },
+  };
+  const fromPhoto = studioTokens('creator', 'photo', photo);
+  assert.equal(fromPhoto.dark.deep, photo.light.fill);
+  assert.equal(fromPhoto.dark.deepLabel, photo.light.label);
+  for (const accent of [...STUDIO_ACCENT_IDS, null]) {
+    const t = studioTokens('creator', accent);
+    assert.equal(t.light.deep, t.light.acc, `${accent}`);
+    assert.equal(t.light.deepLabel, t.light.accLabel, `${accent}`);
+    // The sheen's lower end: deep darkened in OKLCH lightness, hue and chroma kept.
+    for (const mode of MODES) {
+      const { l, c, h } = hexToOklch(t[mode].deep);
+      assert.equal(
+        t[mode].deepEnd,
+        oklchToHex({ l: l - STUDIO_DEEP_SHEEN, c, h }),
+        `${accent} ${mode}`,
+      );
+    }
+  }
+  assert.ok(STUDIO_DEEP_SHEEN >= 0 && STUDIO_DEEP_SHEEN <= 0.06);
+  for (const style of STUDIO_STYLE_IDS) {
+    if (style === 'creator') continue;
+    for (const mode of MODES) {
+      const t = studioTokens(style, null)[mode];
+      for (const k of ['deep', 'deepEnd', 'deepLabel'])
+        assert.equal(t[k], undefined, `${style} ${mode} ${k}`);
+    }
+  }
+});
+
+const TIP_PAIRS = [
+  'deepLabel on deep',
+  'deepLabel on deep (sheen end)',
+  'second line on deep',
+  'second line on deep (sheen end)',
+];
+const pairNames = (style, values, mode) =>
+  studioContrastPairs(style, values, mode).map((p) => p.name);
+
+test('Creator proves its Tip at both sheen ends and its second line, in light, and in dark only for Ink’s values', () => {
+  const light = pairNames('creator', STUDIO_ACCENTS.blue.light, 'light');
+  const dark = pairNames('creator', STUDIO_ACCENTS.blue.dark, 'dark');
+  const inkDark = pairNames('creator', STUDIO_ACCENTS.ink.dark, 'dark');
+  for (const name of TIP_PAIRS) {
+    assert.ok(light.includes(name), `light: ${name}`);
+    assert.ok(!dark.includes(name), `dark: ${name}`);
+    assert.ok(inkDark.includes(name), `Ink dark: ${name}`);
+  }
+  // In light the Tip is the light pair; the sheen end is the fill darkened by the sheen.
+  const pairs = studioContrastPairs(
+    'creator',
+    STUDIO_ACCENTS.blue.light,
+    'light',
+  );
+  const by = (name) => pairs.find((p) => p.name === name);
+  assert.deepEqual(by('deepLabel on deep'), {
+    name: 'deepLabel on deep',
+    fg: '#ffffff',
+    bg: '#0a5bd3',
+    min: 4.5,
+  });
+  assert.equal(
+    by('deepLabel on deep (sheen end)').bg,
+    studioTokens('creator', 'blue').light.deepEnd,
+  );
+  // Ruling P2: the second line is drawn at full opacity, so its pair is deepLabel itself.
+  assert.equal(by('second line on deep').fg, '#ffffff');
+  assert.equal(by('second line on deep').min, 4.5);
+  // Nine other styles never carry them.
+  for (const style of ORIGINAL_NINE)
+    for (const name of TIP_PAIRS)
+      assert.ok(
+        !pairNames(style, STUDIO_ACCENTS.ink.dark, 'dark').includes(name),
+        `${style}: ${name}`,
+      );
+});
+
+const everyAccentAndMode = (style, names) => {
+  for (const accent of [...CURATED, null])
+    for (const mode of MODES) {
+      const have = pairNames(style, accentValues(style, accent, mode), mode);
+      for (const name of names)
+        assert.ok(have.includes(name), `${style} ${accent} ${mode}: ${name}`);
+    }
+};
+
+test('Creator proves chip label and selected ring on card, the badge on el2, chip borders on bg and card', () => {
+  everyAccentAndMode('creator', [
+    'chip label (fg) on card',
+    'selected ring (accText) on card',
+    'icon badge (fg) on el2',
+    'unselected chip border on bg',
+    'unselected chip border on card',
+  ]);
+});
+
+test('Professional proves fg, fg2 and accText on row, chip borders on row and card, the selected border on row, and the badge on el2', () => {
+  everyAccentAndMode('professional', [
+    'fg on row',
+    'fg2 on row',
+    'accText on row',
+    'unselected chip border on row',
+    'unselected chip border on card',
+    'selected border (accText) on row',
+    'icon badge (fg) on el2',
+  ]);
+});
+
+// Addendum §5.2, the envelope rule: a new surface an accent value is drawn on is no darker (light)
+// or no lighter (dark) than the nine's extremes, so every stored photo accent stays valid.
+test('new surfaces sit inside the photo-accent envelope', () => {
+  const luminance = (hex) => (contrastRatio(hex, '#000000') - 1) * 0.05;
+  const surfaces = (id, mode) => {
+    const n = STUDIO_STYLES[id].neutrals[mode];
+    return [n.bg, n.card, n.row].filter(Boolean);
+  };
+  const lightFloor = Math.min(
+    ...ORIGINAL_NINE.flatMap((id) => surfaces(id, 'light')).map(luminance),
+  );
+  const darkCeiling = Math.max(
+    ...ORIGINAL_NINE.flatMap((id) => surfaces(id, 'dark')).map(luminance),
+  );
+  assert.equal(Number(lightFloor.toPrecision(3)), 0.857);
+  assert.equal(luminance('#eeeef1'), lightFloor, 'Tiles bg');
+  assert.equal(Number(darkCeiling.toPrecision(3)), 0.0149);
+  assert.equal(luminance('#24201b'), darkCeiling, 'Linen card');
+  for (const id of NEW_STYLES) {
+    for (const hex of surfaces(id, 'light'))
+      assert.ok(luminance(hex) >= lightFloor, `${id} light ${hex}`);
+    for (const hex of surfaces(id, 'dark'))
+      assert.ok(luminance(hex) <= darkCeiling, `${id} dark ${hex}`);
+  }
+  assert.equal(surfaces('professional', 'light').length, 3);
+  assert.equal(surfaces('professional', 'dark').length, 3);
 });

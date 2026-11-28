@@ -138,7 +138,7 @@ test('choosing TipMe purple stores no accent', () => {
   );
 });
 
-test('the accent swatches: TipMe purple first on Classic only, the eight, then From your photo', () => {
+test('the accent swatches: TipMe purple first on Classic, the eight, then From your photo', () => {
   const names = (style) => accentChoices(style, 'pro').map((a) => a.name);
   const eight = [
     'Ink',
@@ -163,6 +163,26 @@ test('the accent swatches: TipMe purple first on Classic only, the eight, then F
   assert.equal(withAccent(doc(), 'amber').accent, 'amber');
 });
 
+// Addendum §5.1: a null default is TipMe purple, so it leads the swatches wherever it is the
+// style's own, not only on Classic.
+test('TipMe purple leads the swatches on every style whose default is no accent', () => {
+  assert.deepEqual(accentChoices('creator', 'pro')[0], {
+    value: null,
+    name: 'TipMe purple',
+    fill: '#7a32f9',
+    disabled: false,
+  });
+  assert.equal(accentChoices('creator', 'pro').length, 10);
+  assert.equal(accentChoices('professional', 'pro')[0].value, 'ink');
+  assert.equal(accentChoices('professional', 'pro').length, 9);
+  assert.equal(accentChoices('classic', 'pro')[0].name, 'TipMe purple');
+  assert.equal(accentChoices('classic', 'pro').length, 10);
+  assert.equal(
+    accentHeading(doc({ style: 'creator', accent: null })),
+    'TipMe purple',
+  );
+});
+
 test('card labels: "Clear, Quiet, bright, precise. Free." and Classic adds "The default."', () => {
   assert.equal(styleCardLabel('clear'), 'Clear, Quiet, bright, precise. Free.');
   assert.equal(
@@ -177,12 +197,12 @@ test('card labels: "Clear, Quiet, bright, precise. Free." and Classic adds "The 
     assert.match(styleCardLabel(id), /^[A-Z][a-z]+, .+\. (Free|Pro)\./, id);
 });
 
-test('the heading reads "4 of 9 free" on Free and "9 styles" on Pro', () => {
-  assert.equal(styleHeading('free'), '4 of 9 free');
-  assert.equal(styleHeading('pro'), '9 styles');
+test('the heading reads "4 of 11 free" on Free and "11 styles" on Pro', () => {
+  assert.equal(styleHeading('free'), '4 of 11 free');
+  assert.equal(styleHeading('pro'), '11 styles');
   assert.equal(
     proBanner(),
-    'Stage, Signboard, Sprint, Tiles and Horizon come with Pro.',
+    'Stage, Signboard, Sprint, Tiles, Horizon, Creator and Professional come with Pro.',
   );
 });
 

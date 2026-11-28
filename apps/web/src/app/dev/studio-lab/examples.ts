@@ -366,6 +366,9 @@ export const LAB_STYLE_EXAMPLES: Partial<
   signboard: styleExample('signboard', 'light', 'plain'),
   sprint: styleExample('sprint', 'light'),
   tiles: styleExample('tiles', 'light', 'plain'),
+  // Creator is dark-first (addendum §7.1), Professional light (§7.2); both on "Your cover".
+  creator: styleExample('creator', 'dark'),
+  professional: styleExample('professional', 'light'),
 };
 
 /** §9.10's long names, for `?example=long-names` (the first, unless `&name=` picks another). */
