@@ -1161,10 +1161,10 @@ export type WithdrawalQuoteResult =
       /** A tip went through a provider that is no longer connected; its money isn't counted. */
       heldElsewhere: boolean;
       /**
-       * Who pays `feeMinor` on a withdrawal asked for now: 'user' for a person's page on every
-       * withdrawal (owner, 25 Nov 2026) and for a business since 12 Nov 2026, which takes it from the
-       * amount chosen; 'tipme' only when an unused top-up can pay it or, for a business, the
-       * absorbed-fee switch is on.
+       * Who pays `feeMinor` on a withdrawal asked for now. By default the account pays every
+       * withdrawal ('user', taken from the amount chosen): a person's page since 25 Nov 2026
+       * (profit guards) and a business since 12 Nov 2026. 'tipme' only when a withdrawal fee waiver
+       * is in force for the account or its kind (fee waivers, W8), or an unused top-up can pay it.
        */
       feePaidBy: 'user' | 'tipme';
       /**

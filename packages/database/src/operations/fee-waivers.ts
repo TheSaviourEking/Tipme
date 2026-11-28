@@ -7,6 +7,7 @@ import {
   feeWaiverWindow,
   lagosDayStart,
   resolveFeeWaiver,
+  WITHDRAWAL_FEE_COPY_MINOR,
   type FeeWaiverFee,
   type FeeWaiverKind,
   type FeeWaiverPayer,
@@ -480,13 +481,14 @@ const DAY_MS = 86_400_000;
 /**
  * What a kind-wide TipMe-pays rule would have cost over the last 30 days (W11), counted over whole
  * Lagos days: the 30 days before today's start in Lagos, so the figure holds all day and a screen's
- * figure is still the live one when the code is entered. For the tip fee, the
- * fees (platform + provider) of SUCCEEDED tips completed then; for the withdrawal fee, the user fees
- * of that kind's non-FAILED withdrawals asked for then. Giving is 0 until it is built. Team tips
- * count too: their fee is charged like a person's tip. A withdrawal TipMe already covered counts
- * the fee it would have charged (`waived_fee_minor`) instead of its user fee, which is then 0 (W8),
- * and a tip it covered counts `waived_platform_fee_minor` (R23), so each counts once and renewing
- * a waiver doesn't read as free.
+ * figure is still the live one when the code is entered. For the tip fee, the fees (platform +
+ * provider) of SUCCEEDED tips completed then; for the withdrawal fee, the user fees of that kind's
+ * non-FAILED withdrawals asked for then (for individuals, each request once, and one TipMe paid
+ * without a waiver at today's partner fee: spec addendum 27–28 Nov 2026). Giving is 0 until it is
+ * built. Team tips count too: their fee is charged like a person's tip. A withdrawal TipMe already
+ * covered counts the fee it would have charged (`waived_fee_minor`) instead of its user fee, which
+ * is then 0 (W8), and a tip it covered counts `waived_platform_fee_minor` (R23), so each counts
+ * once and renewing a waiver doesn't read as free.
  */
 export async function estimateFeeWaiverMonthlyCost(
   db: Database | Tx,
@@ -519,22 +521,41 @@ export async function estimateFeeWaiverMonthlyCost(
       );
     return BigInt(row?.total ?? '0');
   }
-  const [row] = await db
+  const charged = sql`CASE WHEN ${payouts.feeWaiverId} IS NOT NULL
+    THEN ${payouts.waivedFeeMinor} ELSE ${payouts.userFeeMinor} END`;
+  const inWindow = and(
+    ne(payouts.status, 'FAILED'),
+    kind === 'business'
+      ? isNotNull(payouts.businessId)
+      : isNotNull(payouts.profileId),
+    gte(payouts.createdAt, since),
+    lt(payouts.createdAt, until),
+  );
+  if (kind === 'business') {
+    const [row] = await db
+      .select({ total: sql<string>`coalesce(sum(${charged}), 0)::text` })
+      .from(payouts)
+      .where(inWindow);
+    return BigInt(row?.total ?? '0');
+  }
+  // A person pays every withdrawal now (profit guards, 25 Nov 2026), but one TipMe paid without a
+  // waiver (the old daily free ones, a spent top-up) stored a 0 user fee: it counts the partner's
+  // fee today instead, so the figure isn't low while the old free ones are still in the window. Each request counts once, however many parts
+  // it was paid in (only one part carries the fee).
+  const requests = db
     .select({
-      total: sql<string>`coalesce(sum(CASE WHEN ${payouts.feeWaiverId} IS NOT NULL
-        THEN ${payouts.waivedFeeMinor} ELSE ${payouts.userFeeMinor} END), 0)::text`,
+      fee: sql<string>`CASE
+        WHEN bool_and(${payouts.feePayer} = 'tipme' AND ${payouts.feeWaiverId} IS NULL)
+        THEN ${WITHDRAWAL_FEE_COPY_MINOR.toString()}::bigint
+        ELSE sum(${charged}) END`.as('fee'),
     })
     .from(payouts)
-    .where(
-      and(
-        ne(payouts.status, 'FAILED'),
-        kind === 'business'
-          ? isNotNull(payouts.businessId)
-          : isNotNull(payouts.profileId),
-        gte(payouts.createdAt, since),
-        lt(payouts.createdAt, until),
-      ),
-    );
+    .where(inWindow)
+    .groupBy(sql`coalesce(${payouts.withdrawalGroupId}, ${payouts.id})`)
+    .as('requests');
+  const [row] = await db
+    .select({ total: sql<string>`coalesce(sum(${requests.fee}), 0)::text` })
+    .from(requests);
   return BigInt(row?.total ?? '0');
 }
 

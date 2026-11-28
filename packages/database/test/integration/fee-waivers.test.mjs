@@ -1382,6 +1382,42 @@ test('a tip TipMe already covered counts the fee it would have kept in the estim
   );
 });
 
+test('the individual withdrawal estimate counts each request once at the fee the account now pays', async (t) => {
+  const { db } = await actionSetup(t);
+  // Profit guards (#348): the account pays every withdrawal. A withdrawal TipMe paid under the old
+  // daily rule (fee_payer 'tipme', no waiver) stored a 0 user fee, but under today's rule the
+  // account would pay the partner's fee for it, so a waiver would cost that much: it counts the
+  // current fee (₦50), once per request, however many parts the request was paid in.
+  const oldFree = (fields = {}) =>
+    db.pool.query(
+      `INSERT INTO payouts (id, profile_id, currency, amount_minor, status, idempotency_key,
+                            request_fingerprint, fee_payer, user_fee_minor, withdrawal_group_id,
+                            group_part)
+       VALUES ($1, $2, 'NGN', 100000, 'PAID', $3, 'fp', 'tipme', 0, $4, $5)`,
+      [
+        randomUUID(),
+        ADA,
+        randomUUID(),
+        fields.group ?? null,
+        fields.part ?? null,
+      ],
+    );
+  await seedPayout(db, { profileId: ADA, userFeeMinor: 5_000n });
+  await oldFree();
+  const group = randomUUID();
+  await oldFree({ group, part: 1 });
+  await oldFree({ group, part: 2 });
+  await intoYesterday(db);
+  assert.equal(
+    await estimateFeeWaiverMonthlyCost(db.db, {
+      kind: 'individual',
+      fee: 'withdrawal',
+      now: new Date(),
+    }),
+    15_000n,
+  );
+});
+
 test('setFeeWaiver refuses a kind-wide TipMe-pays rule without confirmCost', async (t) => {
   const { db, set, rows } = await actionSetup(t);
   const kindTip = {

@@ -170,6 +170,9 @@ test('a tip under a fee waiver offers bank transfer only', async () => {
   const { quote, calls } = await tip(bachs, providers, 'ada', 50_000);
   assert.equal(quote.feeFree, true);
   assert.deepEqual(methodsOf(calls), [TRANSFER]);
+  // TipMe keeps nothing of a waived tip: the checkout is started with a zero share.
+  const [[, input]] = calls;
+  assert.equal(input.tipmeShareMinor, 0n);
 });
 
 test('a retried start sends the same list', async () => {

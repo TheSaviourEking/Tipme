@@ -345,7 +345,8 @@ test('a payout requested before this release with fee_payer tipme still gets its
   assert.equal(provider.calls.payouts[0].amountMinor, 500_000n);
 });
 
-test('a business is unchanged: it pays, unless a waiver has TipMe paying its fee', async (t) => {
+/** A business holding its share of one ₦40,000 tip, on the pretend provider (no accounts). */
+async function businessSetup(t) {
   const database = await useDatabase(t);
   const { db } = database;
   const q = (sql, params) =>
@@ -429,10 +430,24 @@ test('a business is unchanged: it pays, unless a waiver has TipMe paying its fee
       providers: providers(),
       ...(feePaidBy ? { feePaidBy } : {}),
     });
-    return (
-      await q('SELECT fee_payer FROM payouts WHERE id = $1', [payoutId])
-    )[0].fee_payer;
+    return payoutId;
   };
+  const payout = async (payoutId) =>
+    (
+      await q(
+        `SELECT fee_payer, user_fee_minor::text AS fee, fee_waiver_id,
+                waived_fee_minor::text AS waived, amount_minor::text AS amount
+           FROM payouts WHERE id = $1`,
+        [payoutId],
+      )
+    )[0];
+  return { database, businessId, feePayerOf, request, payout };
+}
+
+test('a business is unchanged: it pays, unless a waiver has TipMe paying its fee', async (t) => {
+  const { database, feePayerOf, ...b } = await businessSetup(t);
+  const request = async (feePaidBy) =>
+    (await b.payout(await b.request(feePaidBy))).fee_payer;
   assert.equal(await feePayerOf(), 'user');
   assert.equal(await request(), 'user');
   // Fee waivers (spec 2026-11-23 §5): the business kind rule replaced the
@@ -450,6 +465,49 @@ test('a business is unchanged: it pays, unless a waiver has TipMe paying its fee
   });
   await assert.rejects(request('tipme'), { code: 'WITHDRAWAL_FEE_CHANGED' });
   assert.equal(await request('user'), 'user');
+});
+
+test('a business under its own withdrawal waiver pays no fee', async (t) => {
+  const { database, businessId, feePayerOf, request, payout } =
+    await businessSetup(t);
+  assert.equal(await feePayerOf(), 'user');
+  // An account rule for this business alone (spec 2026-11-23 §4): TipMe pays its fee.
+  const rule = await waiveFee(database, {
+    scope: 'account',
+    kind: 'business',
+    businessId,
+  });
+  assert.equal(await feePayerOf(), 'tipme');
+  assert.deepEqual(await payout(await request('tipme')), {
+    fee_payer: 'tipme',
+    fee: '0',
+    fee_waiver_id: rule,
+    waived: '5000',
+    amount: '400000',
+  });
+});
+
+test('a business that opts out of a kind-wide withdrawal waiver pays the fee again', async (t) => {
+  const { database, businessId, feePayerOf, request, payout } =
+    await businessSetup(t);
+  await waiveFee(database, { scope: 'kind', kind: 'business' });
+  assert.equal(await feePayerOf(), 'tipme');
+  // "Normal rules" for this business: the account pays, whatever the kind says.
+  await waiveFee(database, {
+    scope: 'account',
+    kind: 'business',
+    businessId,
+    payer: 'account',
+  });
+  assert.equal(await feePayerOf(), 'user');
+  await assert.rejects(request('tipme'), { code: 'WITHDRAWAL_FEE_CHANGED' });
+  assert.deepEqual(await payout(await request('user')), {
+    fee_payer: 'user',
+    fee: '5000',
+    fee_waiver_id: null,
+    waived: '0',
+    amount: '395000',
+  });
 });
 
 // Fee waivers (spec 2026-11-23 §4, W8; profit guards' "a waiver still makes TipMe pay"): a
