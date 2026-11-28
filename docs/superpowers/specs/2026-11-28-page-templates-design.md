@@ -12,7 +12,9 @@ Templates come **after** the Creator and Professional build (`docs/superpowers/p
 **Sources.**
 
 - The canvas "Studio Page Styles", https://claude.ai/artifact/CFaqbtC1zkoyvVqNVhFz4q, rows "New Pro styles" and "Templates · draft". The draft row has six template boards: Personal / Lifestyle (Creator, light), Musician (Creator), Restaurant (Creator), Consultant (Professional), Seller (Professional), Church / Ministry (Professional, TipMe Giving). They are the visual reference for templates. They stay drafts until the owner approves them, and a board then wins on any look (§0), except where section 15 names a difference.
-- The owner's mockups. The file passed for this design (`creator-professional-mockup.png` in the session scratchpad) holds the two-phone Creator/Professional mockup, **not** the three sheets of ten phones (personal, business, giving). This design therefore names only the templates the canvas draws or this document defines. See section 17, item 1.
+- The owner's mockups. The image read for this design (`creator-professional-mockup.png` in the session scratchpad) is the two-phone Creator/Professional mockup, **not** the three sheets of ten phones (personal, business, giving). The phase 1 catalogue was therefore picked from the six canvas drafts and the template names the owner gave. The owner approved that catalogue on 28 Nov (6.1).
+- **Design reference (owner rule: one design artifact).** The canvas boards in the existing "Studio Page Styles" artifact are the design reference for templates. No new artifact is made. The repo's visual snapshots (section 14) hold each template at phone 390 **and** desktop 1440.
+- **`docs/design/reference/tipme-interface-directions.png` is still missing** (`VISUAL-QUALITY-GATE.md`, `docs/design/reference/README.md`). It does **not** block these PRs. The nine styles shipped the same way: they were checked against their canvas boards and the visual-quality gate, and no board-parity claim was made against that file.
 - The built code on `dev`: `packages/contracts/src/studio-styles.ts`, `studio-document.ts`, `studio-check.ts`, `social-links.ts`, `copy.ts`; `apps/web/src/components/studio-styles/`; `apps/web/src/components/appreciation-form.tsx` (`TipSkin`); `apps/web/src/app/dashboard/studio/` (the editor); `apps/web/src/app/dashboard/welcome/welcome-view.tsx` (setup); `apps/web/src/app/b/[business]/…` (business pages).
 
 **Not an approval.** This is a product and design decision only. It is not legal, data-protection, regulatory or payment-partner approval. D-07 stays OPEN (`docs/00-DECISIONS.md`). Nothing here changes a fee, a minimum, a checkout amount, a ledger posting or a payout. The `page_studio` switch stays off in production; templates add nothing to its preconditions beyond what the C/P spec already lists, apart from the template fixtures joining the `perf:lab` re-run (section 13).
@@ -84,7 +86,9 @@ A person picks "Musician" or "Consultant" and gets a finished page in one tap: t
 
 ## 6. The catalogue
 
-### 6.1 Phase 1: personal templates on Studio (my call)
+### 6.1 Phase 1: personal templates on Studio (owner decided, 28 Nov: "go with your picks")
+
+The owner approved this catalogue as proposed. Other personal templates are added later as data; business and giving follow in later phases (6.2).
 
 **(my call:** personal pages already render Studio styles, so these need no new page type; business and giving need the work in section 12 first**)**
 
@@ -107,7 +111,7 @@ A person picks "Musician" or "Consultant" and gets a finished page in one tap: t
 
 - **Phase 2, business** (owner decided list): hotel, lounge, restaurant, club, gym, spa, retail, real estate, events, travel. They apply to the TipMe for businesses page (section 12.1). The drawn Restaurant board is the reference for the set.
 - **Phase 3, giving:** church / ministry (drawn) and nonprofit at least. They start a TipMe Giving organisation (section 12.2).
-- The remaining personal entries on the owner's sheet are **data-only additions** in the same shape once phase 1 has shipped (section 17, item 1).
+- The remaining personal entries on the owner's sheet are **data-only additions** in the same shape once phase 1 has shipped (owner decided, 28 Nov).
 
 ---
 
@@ -190,6 +194,8 @@ export const STUDIO_TEMPLATES: Record<StudioTemplateId, StudioTemplate>;
 | `contact-support`   | Contact support       | web, whatsapp, telegram                                       | headset  |
 
 - The board's "Book a strategy call" becomes **"Book a call"** and "Track order" becomes **"Track your order"**, to fit the length cap and read as an invitation. **(my call)**
+- Every label above was measured on 28 Nov in Studio Inter (`apps/web/public/fonts/studio/inter-400-800.woff2`, 15 px, weight 600, in Chromium). The widest is "Support me on Patreon" at 149.3 px, so all fit the 152 px cap (7.3).
+- **Short row words for four sites (my call:** the owner's one-line rule, 7.3**).** Four sites' fixed `featured` words are over the cap: "Join my WhatsApp channel" 177.7 px, "Watch me live on Twitch" 157.8, "Follow me on Instagram" 156.3, and "Follow me on Facebook" 151.3 (inside the cap by under 1 px, so too close). Wherever "the site's own words" show on a Creator or Professional row, these four use a row form from the copy file instead: "My WhatsApp channel" (148.1), "Watch live on Twitch" (134.9), "Follow on Instagram" (133.3) and "Follow on Facebook". The featured key's words elsewhere don't change. The cap test (14.2) covers every string a row can show, so a site added later needs a row form if its words don't fit.
 - **"The site's own words"** is always an option on every row: it is the site's `featured` words, exactly as the C/P build renders (stored as no label, 7.4).
 - Adult sites (OnlyFans, Fansly) appear in **no** label's `sites`, so they always keep their fixed words. **(my call:** no template should suggest or dress up an adult link; the owner's adult-links rules stay as they are**)**
 
@@ -206,7 +212,7 @@ export const STUDIO_TEMPLATES: Record<StudioTemplateId, StudioTemplate>;
 
 - Each tip label has two renderings, both in the copy file:
   - `line`: the words alone ("Tip the artist"), Creator's line 1. Creator's line 2, "Give, tip or appreciate", stays fixed (C/P §6.5).
-  - `withAmount(amount)`: Professional's pill, "Tip the artist · ₦2,000". The one exception keeps the C/P wording: "Send a tip" renders "Send a ₦2,000 tip". With no valid amount, the pill shows `line`.
+  - `withAmount(amount)`: Professional's pill, "Tip the artist · ₦2,000". The one exception keeps the C/P wording: "Send a tip" renders "Send a ₦2,000 tip". With no valid amount, or when the amount doesn't fit (8.1), the pill shows `line`.
 - **Banned in any tip label (my call):** "donate", "donation" (it implies a charity on a personal page), "buy", "pay", "order", "checkout", "price" (a tip must never look like a purchase), and any word implying verification, licensing or approval. Link labels may say "Shop" or "Order", because they visibly link out (section 8.2), but never "Pay" or "Checkout".
 
 ### 7.3 One translatable source (my call)
@@ -215,11 +221,22 @@ export const STUDIO_TEMPLATES: Record<StudioTemplateId, StudioTemplate>;
 - It holds `TEMPLATE_COPY.name`, `.describe` (one line each, for the picker), `.link` (per `LinkLabelId`), `.tip` (per `TipLabelId`, `line` and `withAmount`) and `.hint` (starter placeholders, e.g. "e.g. My music", "e.g. Upcoming shows", "e.g. What I offer").
 - `apps/web/test/contracts-client-imports.test.mjs` gains the new entry, so the no-imports rule is enforced.
 
-**Length caps (my call, proven at 320 px):**
+**Length caps (my call; owner's visibility rule, 28 Nov: link labels stay on one line in both styles at 320 px, in English):**
 
-- **Link label: at most 24 characters.** A Creator or Professional row at 320 has about 196 px for the label (320 − 40 gutter − 12 − 32 badge − 12 − 14 chevron − 14 padding), which fits 24 characters of Inter 15/20 600 on one line. A label may still wrap to two lines in a translation; the row grows, nothing clips.
-- **Tip label `line`: at most 20 characters.** It is the space Creator's line 1 has at 320 once the amount has wrapped under line 2 (C/P §6.5).
-- A contracts test asserts both caps on every string.
+Text widths at 320 px, from the C/P geometry (C/P §7.1, §7.2) and the drawn boards:
+
+| Where                      | Sum                                                                                                                                         | Text width |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
+| Creator row                | 320 − 2×20 gutter = 280 row; − 12 and 14 padding − 2 border − 32 badge − 16 chevron − 2×12 gaps                                             | **180 px** |
+| Professional row (in card) | 320 − 2×12 card inset = 296 card; − 2×20 card padding (board) = 256 row; − 12 and 14 padding − 2 border − 32 badge − 16 chevron − 2×12 gaps | **156 px** |
+| Creator Tip line 1         | 280 button − 20 and 18 padding − 24 heart − 18 chevron − 2×14 gaps (the amount has wrapped under line 2, C/P §6.5)                          | **172 px** |
+| Professional pill text     | 256 pill − 2×20 padding − 18 heart − 8 gap                                                                                                  | **190 px** |
+
+- The card padding (20) and pill padding (20) are read off the boards, because the C/P spec doesn't state them. The builder takes the real values from the built C/P CSS and sets the constants in 8.1 from them. **(builder's call:** the measurement test in 14.2 is the arbiter**)**
+- **Link label: at most 152 px** of Studio Inter 15 px 600, measured. That is the tighter style's width (Professional, 156) less 4 px for rendering differences between platforms. A unit test also holds a coarse guard of 22 characters. **No link label wraps in English.** A future translation may wrap to two lines; the row grows and nothing clips.
+- **Tip label `line`: at most 168 px** of Studio Inter 17 px 650 (Creator's 172 less 4), and at most 20 characters. The widest, "Appreciate my work", is 148.9 px.
+- **The Professional pill** follows the rule in 8.1. A label that fits only without the amount is kept: it shows label-only.
+- A contracts unit test asserts the character guards. A Chromium measurement test (14.2) asserts the pixel caps on every string.
 
 ### 7.4 The document (v2, three optional fields)
 
@@ -257,19 +274,34 @@ interface StudioDocument {
 
 - `AppreciationForm` takes an optional `tipLabel?: TipLabelId`. With none, the skin's fixed C/P label renders exactly as built.
 - **Creator:** line 1 is the label's `line`; line 2 stays "Give, tip or appreciate". Accessible name: "{line}, tip ₦2,000" ("{line}" with no valid amount).
-- **Professional:** the pill shows `withAmount(amount)` and is its own accessible name.
+- **Professional, "label · amount" or label only (my call:** the amount must never clip or wrap the pill, and the chips and the sticky bar already show it**):**
+  - The pill shows `withAmount(amount)` only when it fits on one line in the 320 px pill. Otherwise it shows the label alone. The same rule holds at every width, so the pill never changes form between devices.
+  - The rule is arithmetic, so the server and the client agree and nothing shifts. The page reads no layout:
+    `fits = labelWidth[tipLabel] + 12.75 + amountWidth(amount) ≤ 186`.
+    - `labelWidth` is each label's measured width at 17 px 600, a generated constant in `template-copy.ts`.
+    - 12.75 is " · ". For "Send a tip", the form is `77.0 + amountWidth` ("Send a " + " tip").
+    - `amountWidth` = 12.28 (₦) + 8.5 × digits + 4.25 × (commas + points). The figures are tabular, so the width depends only on the characters.
+    - 186 is the 190 px pill text width less 4 px.
+  - The test (14.2) re-measures every constant in Chromium to within 0.5 px.
+  - Examples, measured 28 Nov: "Tip the artist · ₦100,000" 175.4 fits; "Support my work · ₦2,000" 191.8 shows "Support my work"; "Send a ₦1,000,000 tip" 157.3 fits.
+  - **The largest amount:** there is no tip maximum (`packages/domain/src/fees.ts`), and the form accepts up to 12 digits of kobo (`checkout.ts`), so the largest is ₦9,999,999,999.99 (131.3 px). It shows label-only for every label except "Send a tip" (208.3, also label-only). `pro.ts` `limits.maxMinor` is the Pro price's limit, not a tip limit.
+  - **Accessible name:** "{line}, ₦2,000" when label-only, or the visible text when the amount shows. The amount is always spoken.
 - The sticky phone bar keeps "Tip ₦…" in every case (§13). "Starting your tip…" and every closed, error and Custom state are unchanged.
 
 ### 8.2 Link rows
 
 - **A labelled link is a row (my call).** A link with a label renders as a row even if its site's `place` is `icon`. That is how the drawn Musician board shows "Follow on Instagram" as a row. Each link still renders exactly once; the featured link is still the first row.
-- The row's visible text is the chosen label. Without one, it is the site's `featured` words, as built.
+- The row's visible text is the chosen label. Without one, it is the site's `featured` words, or the site's short row form (7.2), as built.
+- **A link whose URL changes loses its label (my call:** a label was chosen for that destination**).** The stored `link` key no longer matches, so the public page shows the site's standard words. On the next Studio open, the editor shows a one-line notice per affected link: "Your link to {Site} changed. Choose its label again." The stale entry is dropped on the next save.
 - **Accessible name:** "{label}, {Site}{: handle}, opens in a new tab". A custom label never hides where the link goes. **(my call)**
 - Rows are links out, with a chevron, never filled with the accent and never styled like the Tip button. **(owner decided item 3: featured content links out and never looks like a checkout)**
 
 ### 8.3 Row glyphs
 
-- Eleven generic glyphs: `calendar`, `bag`, `chat`, `pen`, `grid`, `image`, `plane`, `people`, `truck`, `headset`, `menu`. They are inline SVG, stroke `currentColor`, 16 px, decorative, in the existing badge disc (`fg` on `el2`, a pair the C/P build proves). **(my call:** they match the drawn boards and need no brand rules**)**
+- Eleven generic glyphs: `calendar`, `bag`, `chat`, `pen`, `grid`, `image`, `plane`, `people`, `truck`, `headset`, `menu`. They are inline SVG, stroke `currentColor`, drawn at 16 px, decorative. **(my call:** they match the drawn boards and need no brand rules**)**
+- **The builder authors them** as SVG on the 24-unit construction grid, with optical alignment and rounded joins, per `docs/design/ICONOGRAPHY.md`. They are added to the canvas boards in "Studio Page Styles" for review **before PR 2** (section 16). **(my call:** icons are reviewed where the rest of the look is reviewed**)**
+- **The disc** follows C/P's existing badge discs exactly: 32 px circle, `fg` on `el2`, a pair the C/P build proves.
+- **Forced colours:** each disc gets a 1 px `CanvasText` border, and the glyph keeps `currentColor`, so the disc stays visible with no background. **(my call)**
 - `menu` is for phase 2 (restaurant). All eleven together stay under 2 KB of markup. They are server-rendered, so they add no client script.
 
 ---
@@ -284,13 +316,14 @@ One application is **one undo step**, named "Undo: template applied". It sets:
 - `template` to its id, `tipLabel` to null (the default);
 - the cover type to "Your cover" when the style offers it (both do).
 
-**Mode is part of the preset.** "Personal" is Creator in light, so applying it sets light. This differs from switching **style**, which keeps the person's mode (C/P §6.2, owner decided 27 Nov). Flagged in section 17, item 2.
+**Mode is part of the preset (owner decided, 28 Nov).** Applying a template sets the template's light or dark mode: "Personal" is Creator in light, so applying it sets light. The person can switch back in one tap. Switching **style** alone still keeps the person's mode (C/P §6.2; the 27 Nov rule stands for style switches).
 
 ### 9.2 What never changes
 
 - Photo, cover photo, name, bio, links and blocks. Nothing is reordered or removed.
 - **Existing links keep their words.** On a page that already has links, applying a template stores **no** labels. The editor shows each row with its current words and a one-tap suggestion when the template has a label that fits the site, e.g. "Use 'Listen on Spotify'". Nothing changes until the person picks it. **(my call:** owner decision 4**)**
 - **Starter blocks only on an empty page.** If the draft has zero blocks, the editor offers "Add the {template} blocks" (C/P §7.6 mechanics: Pro only, one undo step "Undo: starter layout added", placeholders not stored). A page with blocks never gets them.
+- **Hints after a reload (my call:** hints are never stored, yet they shouldn't vanish on reload**).** The editor derives them by matching the template's `starter` sequence against the page's blocks, by kind (and variant, for text) and order, from the first block. If the sequence matches, each still-empty block gets its template hint. If it doesn't, empty blocks get the generic hints the editor already uses.
 - **Suggested rows** are never written anywhere. In the editor, each suggestion without a matching link shows as an empty row, e.g. "Listen on Spotify: add your link". It never appears on the public page.
 
 ### 9.3 Changing template, removing it, switching style
@@ -313,6 +346,8 @@ One application is **one undo step**, named "Undo: template applied". It sets:
 
 - The section sits at the **top of the Style tab**, above the style cards, headed "Start from a template".
 - It is a radio group of cards (`role="radiogroup"`). Each card shows a miniature (the style's miniature in the template's accent and mode), the name and the one-line description. A "No template" card comes first. On phones the cards scroll horizontally with snap; on desktop they wrap in a grid of three.
+- **Card text caps (my call:** cards must line up and never clip**):** name at most 22 characters, description at most 48. Type sizes are fixed, the same as the existing style cards (`style-cards.tsx`: the name in `pst-card__name`, the description at the card's mood size). All cards are equal height (the tallest content sets one grid row). Tested at 320 (14.2).
+- **Selected card in forced colours:** a 2 px `Highlight` outline plus the existing check mark, so the choice doesn't rely on colour or background. Unselected cards keep a 1 px `CanvasText` border. **(my call)**
 - Choosing a card applies it to the draft at once (9.1) and the live preview updates. Under the group: "Your photo, bio, links and blocks stay as they are."
 - With a template active (Pro), two sections follow:
   - **"Tip button wording":** a radio group of that template's tip labels, each previewed with an example amount.
@@ -323,7 +358,10 @@ One application is **one undo step**, named "Undo: template applied". It sets:
 ### 10.2 In setup: "What best describes you?" (my call)
 
 - It is shown on the welcome flow's **done** screen, not as a fourth step. **(my call:** the three-step setup and its "Step n of 3" copy stay as they are, and nobody has to pass a Pro choice to finish setup**)**
-- It shows the six template cards and "Skip". Choosing one goes to `/dashboard/studio?template=<id>`. The editor opens with that template applied to the draft on Pro, or as a preview on Free (9.4). Nothing is stored by the choice itself, and there is no new profile field.
+- It shows the six template cards and "Skip". Choosing one goes to `/dashboard/studio?template=<id>`. Nothing is stored by the choice itself, and there is no new profile field.
+- **No silent change (my call:** owner decision 4; an autosaved draft must not change from a link**).**
+  - **New empty page** (Classic default, no blocks, no Studio row yet): the template applies straight away, on Pro to the draft, or as a preview on Free (9.4).
+  - **Page with content** (any block, a non-default style, or a published design): the editor opens with a confirm, "Use the {template} template? Your photo, bio, links and blocks stay as they are." The buttons are "Use template" and "Not now". Nothing changes until the person confirms.
 
 ---
 
@@ -357,7 +395,7 @@ Business templates apply to the TipMe for businesses page (owner decided). That 
 3. **A links list for a business**, in the same `SocialLink` shape and rules.
 4. **The tip button on a business page means a team tip at a location.** The drawn "Tip our team" uses the release 2 team tip. With several locations, the button leads to the location choice first. A business-wide tip that isn't a team tip is out of scope.
 5. **Gating on Business Pro**, with lapse as in the business plan's R8.
-6. **Resolve the conflict with the planned branded page (C6–C7):** its free `brand_color` breaks the curated rule. The recommendation is that Business Pro's "branded page" becomes these Studio styles and templates. That is the owner's call through the coordinator (section 17, item 3).
+6. **The planned branded page (C6–C7), a phase 2 question that doesn't block phase 1:** its free `brand_color` breaks the curated rule. The recommendation is that Business Pro's "branded page" becomes these Studio styles and templates. The owner decides before phase 2 is planned (section 17).
 
 ### 12.2 Giving templates: what's needed first
 
@@ -378,7 +416,26 @@ Church and nonprofit templates start a TipMe Giving organisation, not a personal
 - Every row and icon keeps the C/P accessible names, plus 8.2's rule that a custom label never hides the site.
 - Targets are at least 44×44; template cards at least 104 wide.
 - Axe is clean per template per mode. Reduced motion: the card selection doesn't animate.
-- Long labels wrap; nothing truncates with an ellipsis.
+- Nothing truncates with an ellipsis. English link labels never wrap (7.3).
+
+**The owner's four design tests (owner, 28 Nov: "contrast, visibility, smoothness, fluidity").** Each is defined so a test can fail it:
+
+1. **Contrast.** Every text and non-text pair a template page draws is a WCAG pair proven in the contrast test: text 4.5:1, large text 3:1, UI 3:1, in light and dark.
+   - Templates only choose combinations the C/P matrix already proves (7.1).
+   - The glyph disc reuses the badge pair (`fg` on `el2`).
+   - A unit test asserts that every template's style × accent × mode is in the proven set.
+2. **Visibility.**
+   - Type sizes are the C/P sizes. Targets are at least 44×44.
+   - No clipping and no overlap at 320, 390 and 430 (`geometryProblems` empty), with English link labels on one line (7.3).
+   - In forced colours (`forced-colors: active`), the Tip, rows, chips, glyph discs and the selected template card stay visible with borders or outlines (8.3, 10.1).
+   - At 200% zoom (a 1280 px viewport zoomed to 640 CSS px), the page reflows with no horizontal scroll and no lost content.
+3. **Smoothness** (`docs/design/EXPERIENCE-AND-MOTION.md` §9–10), measured in Playwright with CPU throttling on the `/@tpl<id>` fixtures:
+   - CLS below 0.1, and 0 on the Tip action; the label-only rule (8.1) is arithmetic, so it can't shift.
+   - INP below 200 ms for pressing a chip and the Tip.
+   - Only `transform` and `opacity` animate, checked by a test that reads the computed `transition-property` of every animated element.
+   - Reduced motion is honoured: final screens match with it on.
+   - **"Apply template" in the editor** has an INP budget of 200 ms on the same throttled profile. The live preview must swap to the target style without waiting for its sheet to load, so the editor **preloads the style sheets of the templates' two styles** (Creator and Professional) when the Templates section mounts. **(my call:** the two sheets are a few KB each and the editor already loads its preview styles**)**
+4. **Fluidity.** The layout holds at every width from 320 to 1440: tested at 320, 360, 390, 430, 768, 1024, 1280 and 1440, with no horizontal overflow (`scrollWidth ≤ clientWidth`) and the C/P DOM order at each.
 
 **Performance (§4.3 budgets, unchanged):**
 
@@ -395,13 +452,21 @@ Church and nonprofit templates start a TipMe Giving organisation, not a personal
 1. **Contracts (unit):**
    - Every template's style is `creator` or `professional`, its accent curated or null, its labels and hints exist, and its suggested rows are inside its `linkLabels`.
    - Every link label's `sites` are real catalogue keys and contain no adult site.
-   - The caps hold (24 / 20), and no string contains a banned word or the payment provider's name (the copy grep, §14.10).
+   - The character guards hold (link 22, tip 20, card name 22, description 48), and no string contains a banned word or the payment provider's name (the copy grep, §14.10).
+   - The label-only rule: `fits` is true and false exactly where 8.1's measured examples say, and false for every label with ₦9,999,999,999.99.
+   - Every template's style × accent × mode is in the proven contrast set.
+   - The starter-hint matcher: an exact starter sequence gets template hints, and a reordered or edited sequence gets generic hints.
    - Schema: an unknown template is refused, as are a tip label outside the template's list, a link label outside it, labels without a template, and a duplicate `link`.
    - Resolve: unknown values are dropped, and misfit labels are ignored for the render. Idempotent. A fast-check property: any resolved document passes the strict schema.
    - A document with none of the three fields is byte-identical through resolve.
 2. **Render (web unit and e2e):**
    - Each phase-1 template × light and dark × 320, 390, 768, 1024 and 1440: axe clean, no horizontal overflow, no clipped text.
-   - The longest link label and the longest tip label with the largest amount fit at 320.
+   - **Measurement test (Chromium, Studio Inter):** every link label and every short row word is at most 152 px; every tip `line` is at most 168 px; every `labelWidth` constant is within 0.5 px of measured.
+   - At 320 in both styles, every link label renders on one line (the row's label box height equals one line height) for the longest label in each template.
+   - Professional at 320 with the longest tip label and ₦9,999,999,999.99 typed into Custom shows the label only, with no clipping, and the accessible name ends with the amount. With "Tip the artist" and ₦100,000 it shows both.
+   - The changed-URL case: after a link's URL changes, the public row shows the site's standard words.
+   - The four design tests of section 13: contrast, visibility (320/390/430, forced colours, 200% zoom), smoothness (CLS, INP, transform/opacity only, reduced motion) and fluidity (320–1440, no overflow) on every `/@tpl<id>` fixture.
+   - Template cards at 320: names and descriptions at their caps fit, and all cards are the same height.
    - Each link renders once. A labelled icon-site link becomes a row; the featured link is still first.
    - Labels show only when the style matches the template; switching style shows the fixed C/P labels.
    - The row's accessible name includes the site. No menu button, no Sign in, no verified mark, and "Powered by tipme" present.
@@ -409,10 +474,14 @@ Church and nonprofit templates start a TipMe Giving organisation, not a personal
    - Applying a template changes style, accent and mode as one undo step, and leaves blocks, links, photo and bio untouched.
    - The starter offer shows only on an empty Pro draft.
    - A label swap saves, undoes and discards correctly. Changing template drops out-of-list labels with the notice.
-   - "No template" clears the fields. The setup link `?template=` opens the preview.
+   - "No template" clears the fields.
+   - The setup link `?template=` applies straight away on a new empty page. On a page with content it shows the confirm, and "Not now" leaves the draft byte-identical.
+   - The changed-URL notice shows once on the next Studio open.
+   - Starter hints come back after a reload.
+   - "Apply template" meets the 200 ms INP budget on the throttled profile, with the style sheet preloaded.
    - Free preview saves nothing.
 4. **Integration:** Free PUT that changes any template field → 403; a lapsed page shows Classic and keeps the fields; renewal restores the template page.
-5. **Snapshots (Linux, from CI artifacts only):** 6 new images, one per phase-1 template at 390 in its own mode. The C/P images, the 18 existing style images and Classic's `profile.visual` must not change.
+5. **Snapshots (Linux, from CI artifacts only):** 12 new images, each phase-1 template at phone 390 **and** desktop 1440 in its own mode. The canvas boards are the reference; the missing `tipme-interface-directions.png` doesn't block (Sources). The C/P images, the 18 existing style images and Classic's `profile.visual` must not change.
 
 ## 15. Where this design departs from the earlier specs (resolved)
 
@@ -420,21 +489,23 @@ Church and nonprofit templates start a TipMe Giving organisation, not a personal
 2. **Fixed tip label per skin (C/P §6.5)** → on a template the label comes from the template's list. The C/P labels remain the default when there is no template.
 3. **"No new document field" (C/P plan, Global Constraints)** → three optional fields (7.4), with no version bump.
 4. **Fixed `place` per site (C/P §5.4)** → a labelled link is always a row (8.2).
-5. **Switching style keeps the mode (C/P §6.2)** → applying a template sets the template's mode (9.1); switching style still keeps it.
+5. **Switching style keeps the mode (C/P §6.2)** → applying a template sets the template's mode (owner decided, 28 Nov; 9.1). Switching style still keeps it.
+6. **Rows use the site's `featured` words (C/P §5.4)** → four sites use a short row form on Creator and Professional rows, to keep the one-line rule (7.2).
+7. **Professional's pill always shows the amount (C/P §6.5)** → on a template, it shows label-only when "label · amount" doesn't fit (8.1).
 
 ## 16. Order of work (my call)
 
 1. **Contracts:** `studio-templates.ts`, `template-copy.ts`, the three document fields, schema and resolve, and tests (14.1).
 2. **Public render:** tip labels in both skins, labelled rows and glyphs, the template fixtures, and render, perf and snapshot tests.
 3. **Editor:** the Templates section, tip wording, link rows with "Add link", the starter offer per template, undo and discard, and the Free preview; then the setup done-screen entry.
-4. **Boards (in parallel with 1):** move the six drafts in the canvas row "Templates · draft" to final after owner review, and draw `creative`. No new artifact. A board wins on any look once approved; the PR names each difference.
+4. **Boards (in parallel with 1):** move the six drafts in the canvas row "Templates · draft" to final after owner review, and draw `creative`. Add the eleven authored glyphs (8.3) to the boards for review **before PR 2**. No new artifact. A board wins on any look once approved; the PR names each difference.
 5. **Phase 2 (business) and phase 3 (giving)** each start with their own plan from section 12.
 
 **Left to the builder:** component structure; the template card miniature details; the "Add link" route (10.1); PR slicing within this order; hint wording for `creative` within the 7.3 rules (copy grep applies).
 
-## 17. Flags for the owner (decisions are made; these are the ones worth a look)
+## 17. Open questions for the owner
 
-1. **The template list.** The three sheets of ten weren't available to this design, only the canvas's six drafts. Phase 1 is the six in 6.1 (four drawn, plus `creator` and `creative`). The rest of the personal sheet is added later as data in the same shape. If the sheet names differ, only names and descriptions change.
-2. **Mode with a template (9.1).** Applying a template sets its mode (Personal = light Creator). Switching style alone keeps the person's mode, as decided on 27 Nov.
-3. **Business Pro "branded page" (12.1).** The planned free brand colour conflicts with curated styles. The recommendation is that the branded page becomes Studio styles and templates on the business page.
-4. **The tip and label wording lists (7.2)** are mine, built from the boards. The owner may want to add or remove entries; the shape takes any list within the caps and banned words.
+None block phase 1. The catalogue (6.1) and the template mode (9.1) were decided by the owner on 28 Nov.
+
+- **Phase 2 question: the Business Pro "branded page" (12.1).** The planned free brand colour conflicts with curated styles. The recommendation is that the branded page becomes Studio styles and templates on the business page. This is answered before phase 2 is planned.
+- **For review, not blocking: the wording lists (7.2).** They are my call, built from the boards. The owner may add or remove entries; the shape takes any list within the caps and banned words.
