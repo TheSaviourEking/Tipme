@@ -394,10 +394,46 @@ test.describe('live progress', () => {
   test('with the stream refused the sending list reads every 30 s, not 5 s', async ({
     page,
   }, testInfo) => {
-    test.setTimeout(150_000);
+    test.setTimeout(90_000);
     const owner = await enrolOwner(page, testInfo);
     const held = await holdSending(owner.email);
     try {
+      // The page's fake clock: it flows as usual until paused, so the refused connects and their
+      // backoff run as in life; then the test moves it, and reads are timed in the page's own time.
+      await page.clock.install();
+      await page.addInitScript(() => {
+        const w = window as unknown as {
+          __reads: number[];
+          __pending: number;
+          __pollingAt: number | null;
+        };
+        w.__reads = [];
+        w.__pending = 0;
+        w.__pollingAt = null;
+        const native = window.fetch.bind(window);
+        window.fetch = (input, init) => {
+          const url =
+            input instanceof Request ? input.url : String(input as string);
+          if (!/\/v1\/ops\/announcements(\?|$)/.test(url))
+            return native(input, init);
+          w.__reads.push(Date.now());
+          w.__pending += 1;
+          return native(input, init).finally(() => {
+            w.__pending -= 1;
+          });
+        };
+        new MutationObserver(() => {
+          if (
+            w.__pollingAt === null &&
+            document.querySelector('[data-live="polling"]')
+          )
+            w.__pollingAt = Date.now();
+        }).observe(document, {
+          subtree: true,
+          childList: true,
+          attributes: true,
+        });
+      });
       await page.route('**/v1/ops/events', (route) => route.abort());
       await page.goto('/ops/announcements');
       await expect(
@@ -408,18 +444,48 @@ test.describe('live progress', () => {
           name: `Open Live progress ${held.id.slice(0, 8)}`,
         }),
       ).toBeVisible();
-      await page.waitForTimeout(70_000);
-      await expect(page.locator('[data-live="polling"]')).toBeAttached();
+      // Three refused connects (with backoff and probes), then the fallback poll takes over.
+      await expect(page.locator('[data-live="polling"]')).toBeAttached({
+        timeout: 15_000,
+      });
+      const state = () =>
+        page.evaluate(() => {
+          const w = window as unknown as {
+            __reads: number[];
+            __pending: number;
+            __pollingAt: number | null;
+          };
+          return {
+            reads: [...w.__reads],
+            pending: w.__pending,
+            pollingAt: w.__pollingAt,
+            now: Date.now(),
+          };
+        });
+      // Paused a little ahead of the page's clock, which is still flowing: no tick is due that soon.
+      const { now, pollingAt } = await state();
+      await page.clock.pauseAt(now + 2000);
 
-      const { reads } = await timeline(page);
-      expect(reads.length - 1).toBeGreaterThanOrEqual(2);
-      expect(reads.length - 1).toBeLessThanOrEqual(3);
-      for (let i = 1; i < reads.length; i += 1) {
-        // The fallback's 30 s ± 3 s (OPS_LIVE_TIMING), with a second of slack for a slow runner.
-        const gap = reads[i]! - reads[i - 1]!;
-        expect(gap).toBeGreaterThanOrEqual(27_000);
-        expect(gap).toBeLessThanOrEqual(34_000);
+      // 70 s of page time in half-second steps, each read finished before the next step: the
+      // fallback poll's ticks then fall at exact page times (a 5 s timer would show 13 reads).
+      for (let t = 0; t < 70_000; t += 500) {
+        await page.clock.runFor(500);
+        await expect.poll(async () => (await state()).pending).toBe(0);
       }
+      const { reads } = await state();
+      // The first read is the page's own, on load; every later one is a poll tick.
+      const polls = reads.slice(1);
+      expect(polls).toHaveLength(2);
+      // The first tick: 30 s ± 3 s after polling began (+ the 300 ms debounce). The data-live
+      // attribute is seen a render after polling was armed, so allow a second below.
+      const first = polls[0]! - pollingAt!;
+      expect(first).toBeGreaterThanOrEqual(26_000);
+      expect(first).toBeLessThanOrEqual(33_300 + 500);
+      // Tick to tick: 30 s ± 3 s (OPS_LIVE_TIMING), to the half-second step.
+      const gap = polls[1]! - polls[0]!;
+      expect(gap).toBeGreaterThanOrEqual(27_000);
+      expect(gap).toBeLessThanOrEqual(33_000 + 500);
+      await expect(page.locator('[data-live="polling"]')).toBeAttached();
     } finally {
       await held.release();
       await settle(held.id);
