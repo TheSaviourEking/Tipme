@@ -1,6 +1,7 @@
 import {
   DEFAULT_PLAN_FEE_RATES,
   planFeeRatesProblem,
+  storedPlanFeeRatesProblem,
   type PlanFeeRates,
 } from '@tipme/domain';
 import { and, desc, eq, lte } from 'drizzle-orm';
@@ -64,7 +65,7 @@ export async function planFeeRatesInForce(
   const row = await currentPlanFeeRates(db, now);
   if (row) {
     const rates = { freeBps: BigInt(row.freeBps), proBps: BigInt(row.proBps) };
-    if (planFeeRatesProblem(rates) === null)
+    if (storedPlanFeeRatesProblem(rates) === null)
       return { ...rates, source: 'setting', row };
   }
   return { ...DEFAULT_PLAN_FEE_RATES, source: 'default', row: null };

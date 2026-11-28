@@ -3635,6 +3635,39 @@ export const feeWaiverAccountNotices = pgTable(
   ],
 );
 
+/**
+ * What a card payment costs TipMe (owner, 26 Nov 2026), append-only like `plan_fee_rates`: the
+ * card fee rate in basis points, the fixed 3D Secure cost and a safety margin, both in kobo. Card is
+ * offered on a tip only when TipMe's share covers them. The cost in force is the latest row whose
+ * `effective_from` has passed; with no row the coded defaults apply (DEFAULT_CARD_COST). No seed.
+ */
+export const cardCostSettings = pgTable(
+  'card_cost_settings',
+  {
+    id: uuid('id').primaryKey(),
+    rateBps: integer('rate_bps').notNull(),
+    fixedMinor: minor('fixed_minor').notNull(),
+    marginMinor: minor('margin_minor').notNull(),
+    effectiveFrom: timestamp('effective_from', {
+      withTimezone: true,
+    }).notNull(),
+    setBy: uuid('set_by').references(() => users.id),
+    approvedBy: uuid('approved_by').references(() => users.id),
+    reason: text('reason').notNull(),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    index('card_cost_settings_effective_from').on(table.effectiveFrom),
+    check(
+      'card_cost_settings_rate_bps',
+      sql`${table.rateBps} BETWEEN 0 AND 10000`,
+    ),
+    check('card_cost_settings_fixed_minor', sql`${table.fixedMinor} >= 0`),
+    check('card_cost_settings_margin_minor', sql`${table.marginMinor} >= 0`),
+    check('card_cost_settings_reason', sql`char_length(${table.reason}) > 0`),
+  ],
+);
+
 export const PRO_PERIOD_STATUSES = [
   'SCHEDULED',
   'ACTIVE',

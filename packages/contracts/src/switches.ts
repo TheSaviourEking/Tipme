@@ -30,7 +30,7 @@ export const FEATURE_SWITCHES = [
   // Staff "Refund tip", PR #221 (feat/tip-refund): moves money, so a money switch.
   'tip_refunds',
   // `business_payout_fee_absorbed` (owner, 18 Nov 2026) was retired for fee waivers (spec 2026-11-23
-  // §5): the business kind rule for the withdrawal fee, carried over from its value (migration 0130).
+  // §5): the business kind rule for the withdrawal fee, carried over from its value (migration 0131).
   // Its stored row stays and is ignored; its old variable seeds nothing.
   // You collect (ADR-0016, PROPOSED; owner's design, 19 Nov 2026): TipMe takes a new recipient's tips
   // on its own account and transfers them on. Built (plan Task 16) and off everywhere: production

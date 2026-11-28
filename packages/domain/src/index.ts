@@ -15,3 +15,4 @@ export * from './tip-refund.js';
 export * from './collect.js';
 export * from './withdrawal-allocation.js';
 export * from './fee-waivers.js';
+export * from './checkout-methods.js';

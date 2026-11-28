@@ -115,6 +115,7 @@ export * from './operations/fee-waivers.js';
 export * from './operations/fee-waiver-cost.js';
 export * from './operations/fee-waiver-pause.js';
 export * from './operations/fee-waiver-notices.js';
+export * from './operations/card-cost-settings.js';
 export * from './operations/collect-settings.js';
 export * from './operations/collection-mode.js';
 export * from './operations/collect-reserve.js';

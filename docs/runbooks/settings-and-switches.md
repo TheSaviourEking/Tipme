@@ -283,8 +283,8 @@ never touched. Bounds (owner, 18 Nov 2026): whole basis points 150 to 1000 (1.5%
 a move of more than 200 bps on either plan needs the explicit confirm (`confirmLargeChange` in the request, a
 ticked box on the screen). Migration `0118` also cleared per-page deals no longer below the new rate (Free 500 and
 up, Pro 300 and up), one `fee.capped` audit row each. A per-page fee staff set
-(`fee.change`, ADR-0014) still wins below the plan's rate. A person's first 2 withdrawals each Lagos day are free
-(`FREE_WITHDRAWALS_PER_DAY`); from the 3rd the partner's fee comes off the amount. Business tips use the staff member's own plan rate:
+(`fee.change`, ADR-0014) still wins below the plan's rate. Each personal withdrawal pays the partner's ₦50 from the amount,
+unless an unused top-up or a fee waiver covers it (owner, 25 Nov 2026). Business tips use the staff member's own plan rate:
 there is no separate business per-tip rate.
 
 ## Fee waivers: who pays the fees (spec 2026-11-23)
@@ -294,13 +294,13 @@ request, no cache). Each rule names a scope (a whole kind of account, or one acc
 `business`, `giving`), a fee (`tip` or `withdrawal`) and who pays:
 
 - `tipme`: TipMe pays that fee. A waived tip is priced with no TipMe fee; a waived withdrawal is sent whole,
-  with the fee topped up from the platform payment reserve, as for the first 2 free withdrawals of the day.
+  with the fee topped up from the platform payment reserve, as for an unused top-up today.
 - `account`: the normal rules. On one account it opts that account out of a kind-wide waiver.
 - `inherit` (account rules only): the account follows its kind's rule.
 
 An account rule other than `inherit` beats its kind's rule. With neither, today's rules apply: the plan rate
-for tips (with any per-page rate and fee-free credits), and for withdrawals 2 free a Lagos day for a person, the business pays. A rule may have an end
-date (within 24 months). A newer row for the same key replaces the older one from its start. Rows are never
+for tips (with any per-page rate and fee-free credits), and for withdrawals the person or business pays the fee on every withdrawal (profit guards, owner
+25 Nov 2026) unless an unused top-up pays it. A rule may have an end date (within 24 months). A newer row for the same key replaces the older one from its start. Rows are never
 edited. A change is the serious action `fee_waiver.set` (permission `fees.manage`, a reason, a fresh code and a
 second person when one exists), audited with before and after. A kind-wide TipMe-pays rule asks the approver to
 confirm its estimated monthly cost.
@@ -309,10 +309,9 @@ What is recorded:
 
 - A tip quote records the rule (`tip_quotes.fee_waiver_id`) and keeps its terms if the rule ends before payment.
 - A withdrawal records it on every part (`payouts.fee_waiver_id`). `waived_fee_minor` holds the one fee the
-  account would have paid; it is 0 when the withdrawal was free anyway. A waived withdrawal still counts toward
-  the person's 2 free a day.
+  account would have paid; it is 0 when TipMe was paying anyway (an unused top-up).
 
-**The `business_payout_fee_absorbed` switch is retired.** Migration `0130_fee_waiver_carry_over` wrote one kind
+**The `business_payout_fee_absorbed` switch is retired.** Migration `0131_fee_waiver_carry_over` wrote one kind
 rule (`business`, `withdrawal`, reason "Carried over from the switch") matching the switch's stored value: TipMe
 pays if it was on, the business pays otherwise. It has a system audit row. The switch has left `/ops/switches`;
 its stored row stays and nothing reads it, and `BUSINESS_PAYOUT_FEE_ABSORBED` seeds nothing.
@@ -322,3 +321,20 @@ waived tip is charged to TipMe's own balance there. If that balance can't cover 
 recipient instead (ADR-0004). While the active provider's latest reserve reading is low (payments) or
 critical (You collect), new quotes ignore tip waivers and price normally until it recovers. Withdrawal waivers
 are not paused.
+
+## Card costs: when card is offered (owner, 26 Nov 2026)
+
+Not a switch: three figures on the Plan fees page (`/ops/plan-fees`, section "Card costs"; `GET`/`POST
+/v1/ops/card-costs`), stored in `card_cost_settings` (append-only history, migration `0129_card_cost_settings`,
+no seed). With no row the coded defaults apply (`DEFAULT_CARD_COST`): card fee 2% (200 bps), 3D Secure fixed
+cost ₦45 and margin ₦15. A tip checkout offers card only when TipMe's share of that tip covers card fee × amount +
+fixed cost + margin; bank transfer is always offered, and Pro subscription checkouts keep both. The screen shows,
+from the plan rates in force, the tip amount from which each plan offers card: the smallest whole naira from
+which every whole-naira tip offers card, with TipMe's share priced exactly as the quote prices it (rounded half
+up to the kobo; `cardOfferedFromNaira` in `@tipme/domain`). With the defaults: Free from ₦2,000, Pro from ₦6,000.
+A change is the serious action `card_costs.change` (permission `fees.manage`,
+a reason, a fresh code and a second person when one exists; a lone admin acts alone with the alert to owners),
+audited as `card_costs.changed` with from, to and approver. Bounds: rate 0 to 10000 bps, amounts 0 or more, in
+kobo; the cost already in force is refused. Checkouts read it as it was when the tip was quoted
+(`cardCostAt(db, quote.createdAt)`, never cached), so a change applies to tips quoted after it. Change it when the
+partner's card price or the exchange rate moves.

@@ -71,17 +71,6 @@ async function endWaivers(
     );
 }
 
-/** Two withdrawals already today, both free under today's rule (2 free a day, R17). */
-async function twoWithdrawalsToday(profileId: string) {
-  for (let n = 0; n < 2; n += 1)
-    await sql(
-      `INSERT INTO payouts (id, profile_id, currency, amount_minor, status, idempotency_key,
-         request_fingerprint, provider, fee_payer, paid_at, created_at)
-       VALUES ($1, $2, 'NGN', 200000, 'PAID', $3, 'e2e', 'mock', 'tipme', now(), now())`,
-      [randomUUID(), profileId, randomUUID()],
-    );
-}
-
 /** The recipient's newest paid tip, once it is in. */
 async function newestTipId(profileId: string, after: string | null) {
   let id = '';
@@ -243,12 +232,10 @@ test('@alone staff set a tip and a withdrawal waiver; a second person approves; 
       await expect(receipt.getByTestId('fee-covered')).toBeVisible();
     });
 
-    // A third withdrawal today would carry the fee (2 free a day): under the waiver it is Free.
-    await twoWithdrawalsToday(profileId);
+    // Every withdrawal carries the fee (profit guards, owner 25 Nov 2026): under the waiver it is Free.
     let summary = await chooseEverything(me);
     await expect(summary.getByTestId('transfer-fee')).toHaveText('Free');
     await expect(summary.getByTestId('you-receive')).toHaveText('₦2,000');
-    await expect(me.getByTestId('withdrawal-day-note')).toHaveCount(0);
     await expect(me.getByRole('main')).not.toContainText(PROVIDER_NAMES);
     await expectAccessible(me);
     await shoot(me, 't10-withdraw-free', async () => {
@@ -297,12 +284,9 @@ test('@alone staff set a tip and a withdrawal waiver; a second person approves; 
       });
     });
 
-    // The third withdrawal shows its fee again.
+    // The withdrawal shows its fee again.
     summary = await chooseEverything(me);
     await expect(summary.getByTestId('transfer-fee')).toHaveText('₦50');
-    await expect(me.getByTestId('withdrawal-day-note')).toContainText(
-      'This is your 3rd withdrawal today',
-    );
     await expect(me.getByRole('main')).not.toContainText(PROVIDER_NAMES);
     await expectAccessible(me);
     await shoot(me, 't10-withdraw-after', async () => {

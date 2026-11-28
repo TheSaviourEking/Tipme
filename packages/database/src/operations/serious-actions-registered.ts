@@ -94,6 +94,15 @@ import {
   setPlanFeeRates,
 } from './plan-fee-rates.js';
 import {
+  CARD_COSTS_CHANGE_ACTION,
+  cardCostRecord,
+  cardCostInForce,
+  cardCostAt,
+  cardCostWords,
+  checkedCardCostPayload,
+  setCardCosts,
+} from './card-cost-settings.js';
+import {
   checkedCollectSettings,
   COLLECT_SETTINGS_CHANGE_ACTION,
   COLLECT_TRANSFERS_PAUSE_ACTION,
@@ -838,6 +847,38 @@ const feeWaiverSet = acting<FeeWaiverSetPayload>({
       endsAt: set.endsAt?.toISOString() ?? null,
     };
   },
+});
+
+/*
+ * What a card payment costs TipMe (owner, 26 Nov 2026), as the plan fee rates: a money change (it
+ * decides where card is offered), so a second person decides, or a lone admin acts alone with the
+ * alert. Pinned on the cost in force, so a change made while this waited makes it stale. Nobody is
+ * its subject: it applies to every new checkout.
+ */
+const cardCostsChange = acting<{
+  rateBps: number;
+  fixedMinor: string;
+  marginMinor: string;
+}>({
+  name: CARD_COSTS_CHANGE_ACTION,
+  permission: 'fees.manage',
+  target: () => 'card_costs',
+  current: async (tx) => {
+    const { cost, row } = await cardCostInForce(tx, new Date());
+    return { id: row?.id ?? null, ...cardCostRecord(cost) };
+  },
+  describe: async (tx, payload) => {
+    const to = checkedCardCostPayload(payload);
+    const from = await cardCostAt(tx, new Date());
+    return `Change the card cost from ${cardCostWords(from)} to ${cardCostWords(to)}, for new checkouts only`;
+  },
+  act: (tx, payload, context) =>
+    setCardCosts(tx, {
+      cost: checkedCardCostPayload(payload),
+      actorId: context.actorId,
+      approvedBy: context.approverId ?? null,
+      reason: context.reason,
+    }).then(() => cardCostRecord(checkedCardCostPayload(payload))),
 });
 
 /*
@@ -1900,6 +1941,7 @@ export function registerRealSeriousActions(): void {
   registerSeriousAction(tipRefundAbsorbGap);
   registerSeriousAction(tipRefundReturn);
   registerSeriousAction(planFeesChange);
+  registerSeriousAction(cardCostsChange);
   registerSeriousAction(collectSettingsChange);
   registerSeriousAction(collectTransfersPaused(true));
   registerSeriousAction(collectTransfersPaused(false));

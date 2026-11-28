@@ -99,7 +99,7 @@ function controller(db, bachsProvider) {
 async function assertRepairAudited(database) {
   const { rows } = await database.pool.query(
     // Staff rows only: not the system rows (no staff) a reset seeds, under fees.manage, with the
-    // plan fee rates (migration 0118) and the fee rule carried over from the switch (0130).
+    // plan fee rates (migration 0118) and the fee rule carried over from the switch (0131).
     `SELECT DISTINCT permission FROM audit_events
       WHERE permission IS NOT NULL AND staff_user_id IS NOT NULL`,
   );

@@ -60,9 +60,9 @@ test('usernames.manage is a sensitive people permission', () => {
   });
 });
 
-test('the serious actions are the agreed thirty-five', () => {
-  // Fee waivers (spec 2026-11-23 §6) added `fee_waiver.set`.
-  assert.equal(new Set(SERIOUS_ACTIONS).size, 35);
+test('the serious actions are the agreed thirty-six', () => {
+  // Fee waivers (spec 2026-11-23 §6) added `fee_waiver.set`; profit guards added `card_costs.change`.
+  assert.equal(new Set(SERIOUS_ACTIONS).size, 36);
   // You collect staff screens (plan Task 15): every money action there needs collect.manage.
   for (const name of [
     'collect_transfer.retry',

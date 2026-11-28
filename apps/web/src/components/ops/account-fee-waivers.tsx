@@ -41,14 +41,15 @@ export function WaiverCost({ cost }: { cost: OpsFeeWaiverCost }) {
   );
 }
 
-/** Who pays a fee under today's rules, with no waiver (spec §2). */
+/**
+ * Who pays a fee under today's rules, with no waiver (spec §2). Since profit guards (owner, 25 Nov
+ * 2026) a person pays the withdrawal fee on every withdrawal, as a business does (R17).
+ */
 export function normalWords(
   kind: FeeWaiverKindName,
   fee: FeeWaiverFeeName,
 ): string {
   if (kind === 'business' && fee === 'tip') return C.noFee;
-  if (kind === 'individual' && fee === 'withdrawal')
-    return C.individualWithdrawalDefault;
   return C.accountPays;
 }
 

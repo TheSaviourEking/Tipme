@@ -3,15 +3,16 @@ import { test } from 'node:test';
 import {
   CURRENT_FEE_POLICY,
   DEFAULT_PLAN_FEE_RATES,
-  FREE_WITHDRAWALS_PER_DAY,
   PLAN_FEE_MAX_BPS,
   PLAN_FEE_MIN_BPS,
+  PLAN_FEE_STORED_MIN_BPS,
   FEE_POLICY_V1,
   FEE_POLICY_V2_FREE,
   FEE_POLICY_V2_PRO,
   PROCESSING_INCLUDED_FEE_VERSIONS,
   feePolicyForPlan,
   planFeeRatesProblem,
+  storedPlanFeeRatesProblem,
   lagosDayStart,
   planShareBps,
   priceTip,
@@ -93,19 +94,23 @@ test('a staff-set per-account fee still wins below the plan rate, from the setti
   });
 });
 
-test('each rate must be from 150 to 1000 basis points (1.5% to 10%), and Pro never above Free', () => {
-  assert.equal(PLAN_FEE_MIN_BPS, 150n);
+test('each new rate must be from 200 to 1000 basis points (2% to 10%), and Pro never above Free', () => {
+  assert.equal(PLAN_FEE_MIN_BPS, 200n);
+  assert.equal(PLAN_FEE_STORED_MIN_BPS, 150n);
   assert.equal(PLAN_FEE_MAX_BPS, 1000n);
   assert.equal(planFeeRatesProblem({ freeBps: 500n, proBps: 300n }), null);
-  assert.equal(planFeeRatesProblem({ freeBps: 150n, proBps: 150n }), null);
+  assert.equal(planFeeRatesProblem({ freeBps: 200n, proBps: 200n }), null);
   assert.equal(planFeeRatesProblem({ freeBps: 1000n, proBps: 1000n }), null);
   assert.equal(planFeeRatesProblem({ freeBps: 500n, proBps: 500n }), null);
+  assert.equal(planFeeRatesProblem({ freeBps: 199n, proBps: 199n }), 'freeBps');
+  assert.equal(planFeeRatesProblem({ freeBps: 150n, proBps: 150n }), 'freeBps');
   assert.equal(planFeeRatesProblem({ freeBps: 149n, proBps: 149n }), 'freeBps');
   assert.equal(planFeeRatesProblem({ freeBps: 0n, proBps: 0n }), 'freeBps');
   assert.equal(
     planFeeRatesProblem({ freeBps: 1001n, proBps: 300n }),
     'freeBps',
   );
+  assert.equal(planFeeRatesProblem({ freeBps: 500n, proBps: 199n }), 'proBps');
   assert.equal(planFeeRatesProblem({ freeBps: 500n, proBps: 149n }), 'proBps');
   assert.equal(
     planFeeRatesProblem({ freeBps: 1000n, proBps: 1001n }),
@@ -114,6 +119,19 @@ test('each rate must be from 150 to 1000 basis points (1.5% to 10%), and Pro nev
   assert.equal(
     planFeeRatesProblem({ freeBps: 300n, proBps: 500n }),
     'proAboveFree',
+  );
+  // A stored pair from before the floor (150 to 199) is still priceable; only new settings are held to 200.
+  assert.equal(
+    storedPlanFeeRatesProblem({ freeBps: 150n, proBps: 150n }),
+    null,
+  );
+  assert.equal(
+    storedPlanFeeRatesProblem({ freeBps: 149n, proBps: 149n }),
+    'freeBps',
+  );
+  assert.equal(
+    feePolicyForPlan('free', { freeBps: 150n, proBps: 150n }).tipmeShareBps,
+    150n,
   );
   // A rate that is out of bounds is refused before the Pro-above-Free rule.
   assert.throws(() =>
@@ -146,5 +164,4 @@ test('a Lagos calendar day starts at 23:00 UTC the evening before', () => {
   assert.equal(start('2026-11-18T22:59:59.999Z'), '2026-11-17T23:00:00.000Z');
   assert.equal(start('2026-11-18T23:00:00Z'), '2026-11-18T23:00:00.000Z');
   assert.equal(start('2026-11-18T00:30:00Z'), '2026-11-17T23:00:00.000Z');
-  assert.equal(FREE_WITHDRAWALS_PER_DAY, 2);
 });

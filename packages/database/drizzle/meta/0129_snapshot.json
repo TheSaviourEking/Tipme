@@ -1,5 +1,5 @@
 {
-  "id": "e065b193-1627-4771-b7a0-0ee1231de268",
+  "id": "b0a3d454-66db-4de1-ae08-7ae8b124c8f7",
   "prevId": "59da6907-7ddc-425d-be98-e1f5629e2c57",
   "version": "7",
   "dialect": "postgresql",
@@ -2358,6 +2358,126 @@
       },
       "isRLSEnabled": false
     },
+    "public.card_cost_settings": {
+      "name": "card_cost_settings",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "rate_bps": {
+          "name": "rate_bps",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "fixed_minor": {
+          "name": "fixed_minor",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "margin_minor": {
+          "name": "margin_minor",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "effective_from": {
+          "name": "effective_from",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "set_by": {
+          "name": "set_by",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "approved_by": {
+          "name": "approved_by",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "reason": {
+          "name": "reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "card_cost_settings_effective_from": {
+          "name": "card_cost_settings_effective_from",
+          "columns": [
+            {
+              "expression": "effective_from",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "card_cost_settings_set_by_users_id_fk": {
+          "name": "card_cost_settings_set_by_users_id_fk",
+          "tableFrom": "card_cost_settings",
+          "tableTo": "users",
+          "columnsFrom": ["set_by"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "card_cost_settings_approved_by_users_id_fk": {
+          "name": "card_cost_settings_approved_by_users_id_fk",
+          "tableFrom": "card_cost_settings",
+          "tableTo": "users",
+          "columnsFrom": ["approved_by"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "card_cost_settings_rate_bps": {
+          "name": "card_cost_settings_rate_bps",
+          "value": "\"card_cost_settings\".\"rate_bps\" BETWEEN 0 AND 10000"
+        },
+        "card_cost_settings_fixed_minor": {
+          "name": "card_cost_settings_fixed_minor",
+          "value": "\"card_cost_settings\".\"fixed_minor\" >= 0"
+        },
+        "card_cost_settings_margin_minor": {
+          "name": "card_cost_settings_margin_minor",
+          "value": "\"card_cost_settings\".\"margin_minor\" >= 0"
+        },
+        "card_cost_settings_reason": {
+          "name": "card_cost_settings_reason",
+          "value": "char_length(\"card_cost_settings\".\"reason\") > 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
     "public.changelog_entries": {
       "name": "changelog_entries",
       "schema": "",
@@ -4369,309 +4489,6 @@
         "fee_free_credits_not_negative": {
           "name": "fee_free_credits_not_negative",
           "value": "remaining >= 0"
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "public.fee_waiver_notices": {
-      "name": "fee_waiver_notices",
-      "schema": "",
-      "columns": {
-        "rule_id": {
-          "name": "rule_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "kind": {
-          "name": "kind",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "fee_waiver_notices_rule_id_fee_waivers_id_fk": {
-          "name": "fee_waiver_notices_rule_id_fee_waivers_id_fk",
-          "tableFrom": "fee_waiver_notices",
-          "tableTo": "fee_waivers",
-          "columnsFrom": ["rule_id"],
-          "columnsTo": ["id"],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {
-        "fee_waiver_notices_rule_id_kind_pk": {
-          "name": "fee_waiver_notices_rule_id_kind_pk",
-          "columns": ["rule_id", "kind"]
-        }
-      },
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "fee_waiver_notices_kind": {
-          "name": "fee_waiver_notices_kind",
-          "value": "\"fee_waiver_notices\".\"kind\" IN ('started', 'ended')"
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "public.fee_waivers": {
-      "name": "fee_waivers",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "scope": {
-          "name": "scope",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "kind": {
-          "name": "kind",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "profile_id": {
-          "name": "profile_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "business_id": {
-          "name": "business_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "fee": {
-          "name": "fee",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "payer": {
-          "name": "payer",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "starts_at": {
-          "name": "starts_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "ends_at": {
-          "name": "ends_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "reason": {
-          "name": "reason",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "set_by": {
-          "name": "set_by",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "approved_by": {
-          "name": "approved_by",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "fee_waivers_kind_key": {
-          "name": "fee_waivers_kind_key",
-          "columns": [
-            {
-              "expression": "kind",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "fee",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "starts_at",
-              "isExpression": false,
-              "asc": false,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "where": "scope = 'kind'",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "fee_waivers_profile_key": {
-          "name": "fee_waivers_profile_key",
-          "columns": [
-            {
-              "expression": "profile_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "fee",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "starts_at",
-              "isExpression": false,
-              "asc": false,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "where": "profile_id IS NOT NULL",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "fee_waivers_business_key": {
-          "name": "fee_waivers_business_key",
-          "columns": [
-            {
-              "expression": "business_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "fee",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "starts_at",
-              "isExpression": false,
-              "asc": false,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "where": "business_id IS NOT NULL",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "fee_waivers_profile_id_profiles_id_fk": {
-          "name": "fee_waivers_profile_id_profiles_id_fk",
-          "tableFrom": "fee_waivers",
-          "tableTo": "profiles",
-          "columnsFrom": ["profile_id"],
-          "columnsTo": ["id"],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "fee_waivers_business_id_businesses_id_fk": {
-          "name": "fee_waivers_business_id_businesses_id_fk",
-          "tableFrom": "fee_waivers",
-          "tableTo": "businesses",
-          "columnsFrom": ["business_id"],
-          "columnsTo": ["id"],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "fee_waivers_set_by_users_id_fk": {
-          "name": "fee_waivers_set_by_users_id_fk",
-          "tableFrom": "fee_waivers",
-          "tableTo": "users",
-          "columnsFrom": ["set_by"],
-          "columnsTo": ["id"],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "fee_waivers_approved_by_users_id_fk": {
-          "name": "fee_waivers_approved_by_users_id_fk",
-          "tableFrom": "fee_waivers",
-          "tableTo": "users",
-          "columnsFrom": ["approved_by"],
-          "columnsTo": ["id"],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "fee_waivers_scope": {
-          "name": "fee_waivers_scope",
-          "value": "\"fee_waivers\".\"scope\" IN ('kind', 'account')"
-        },
-        "fee_waivers_kind": {
-          "name": "fee_waivers_kind",
-          "value": "\"fee_waivers\".\"kind\" IN ('individual', 'business', 'giving')"
-        },
-        "fee_waivers_fee": {
-          "name": "fee_waivers_fee",
-          "value": "\"fee_waivers\".\"fee\" IN ('tip', 'withdrawal')"
-        },
-        "fee_waivers_payer": {
-          "name": "fee_waivers_payer",
-          "value": "\"fee_waivers\".\"payer\" IN ('tipme', 'account', 'inherit')"
-        },
-        "fee_waivers_account": {
-          "name": "fee_waivers_account",
-          "value": "(\"fee_waivers\".\"scope\" = 'kind' AND \"fee_waivers\".\"profile_id\" IS NULL AND \"fee_waivers\".\"business_id\" IS NULL)\n        OR (\"fee_waivers\".\"scope\" = 'account' AND \"fee_waivers\".\"kind\" = 'individual' AND \"fee_waivers\".\"profile_id\" IS NOT NULL AND \"fee_waivers\".\"business_id\" IS NULL)\n        OR (\"fee_waivers\".\"scope\" = 'account' AND \"fee_waivers\".\"kind\" = 'business' AND \"fee_waivers\".\"business_id\" IS NOT NULL AND \"fee_waivers\".\"profile_id\" IS NULL)"
-        },
-        "fee_waivers_inherit": {
-          "name": "fee_waivers_inherit",
-          "value": "\"fee_waivers\".\"payer\" <> 'inherit' OR \"fee_waivers\".\"scope\" = 'account'"
-        },
-        "fee_waivers_business_tip": {
-          "name": "fee_waivers_business_tip",
-          "value": "NOT (\"fee_waivers\".\"kind\" = 'business' AND \"fee_waivers\".\"fee\" = 'tip')"
-        },
-        "fee_waivers_window": {
-          "name": "fee_waivers_window",
-          "value": "\"fee_waivers\".\"ends_at\" IS NULL OR \"fee_waivers\".\"ends_at\" > \"fee_waivers\".\"starts_at\""
-        },
-        "fee_waivers_reason": {
-          "name": "fee_waivers_reason",
-          "value": "char_length(\"fee_waivers\".\"reason\") > 0"
         }
       },
       "isRLSEnabled": false
@@ -7185,7 +7002,7 @@
       "checkConstraints": {
         "notifications_kind": {
           "name": "notifications_kind",
-          "value": "kind IN ('tip', 'weekly_report', 'moment', 'collect_reminder', 'collect_verified', 'collect_name_recheck', 'dispute_hold', 'fee_waiver_started', 'fee_waiver_ended', 'business_invitation', 'business_verified', 'business_share_held_back')"
+          "value": "kind IN ('tip', 'weekly_report', 'moment', 'collect_reminder', 'collect_verified', 'collect_name_recheck', 'dispute_hold', 'business_invitation', 'business_verified', 'business_share_held_back')"
         }
       },
       "isRLSEnabled": false
@@ -8515,19 +8332,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "fee_waiver_id": {
-          "name": "fee_waiver_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "waived_fee_minor": {
-          "name": "waived_fee_minor",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "0"
-        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -8666,15 +8470,6 @@
           "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
-        },
-        "payouts_fee_waiver_id_fee_waivers_id_fk": {
-          "name": "payouts_fee_waiver_id_fee_waivers_id_fk",
-          "tableFrom": "payouts",
-          "tableTo": "fee_waivers",
-          "columnsFrom": ["fee_waiver_id"],
-          "columnsTo": ["id"],
-          "onDelete": "no action",
-          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -8695,10 +8490,6 @@
         "payouts_currency_iso": {
           "name": "payouts_currency_iso",
           "value": "currency ~ '^[A-Z]{3}$'"
-        },
-        "payouts_waived_fee": {
-          "name": "payouts_waived_fee",
-          "value": "waived_fee_minor >= 0 AND (waived_fee_minor = 0 OR fee_waiver_id IS NOT NULL)"
         },
         "payouts_group_part": {
           "name": "payouts_group_part",
@@ -14231,12 +14022,6 @@
           "notNull": true,
           "default": "'direct'"
         },
-        "fee_waiver_id": {
-          "name": "fee_waiver_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
         "expires_at": {
           "name": "expires_at",
           "type": "timestamp with time zone",
@@ -14276,15 +14061,6 @@
           "tableFrom": "tip_quotes",
           "tableTo": "share_agreements",
           "columnsFrom": ["share_agreement_id"],
-          "columnsTo": ["id"],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "tip_quotes_fee_waiver_id_fee_waivers_id_fk": {
-          "name": "tip_quotes_fee_waiver_id_fee_waivers_id_fk",
-          "tableFrom": "tip_quotes",
-          "tableTo": "fee_waivers",
-          "columnsFrom": ["fee_waiver_id"],
           "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"

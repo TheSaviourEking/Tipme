@@ -186,7 +186,7 @@ test('an owner reads the rates, their source, the business payout rule and no wa
       effectiveFrom: 'string',
     },
   );
-  assert.deepEqual(data.limits, { minBps: 150, maxBps: 1000 });
+  assert.deepEqual(data.limits, { minBps: 200, maxBps: 1000 });
   assert.equal(data.waitingRequestId, null);
   // The business payout fee is a fee waiver rule now (spec 2026-11-23 §5), not a switch shown here.
   assert.equal('business' in data, false);
@@ -300,6 +300,10 @@ test('out-of-range rates, Pro above Free and unchanged rates are refused INVALID
     ['1001', '300'],
     ['149', '149'],
     ['500', '149'],
+    // The floor is 2% (profit guards, Part 3).
+    ['199', '199'],
+    ['500', '199'],
+    ['150', '150'],
     ['0', '0'],
     ['-1', '300'],
     ['300', '500'],

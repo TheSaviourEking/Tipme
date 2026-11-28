@@ -40,7 +40,8 @@
             "tipmeShareMinor": "10000n",
             "successUrl": "http://127.0.0.1:3000/tip/<id:2>",
             "cancelUrl": "http://127.0.0.1:3000/tip/<id:2>",
-            "idempotencyKey": "tipme-checkout-<id:3>"
+            "idempotencyKey": "tipme-checkout-<id:3>",
+            "paymentMethods": ["bank_transfer", "card"]
           }
         ]
       ]
@@ -119,7 +120,8 @@
           {
             "attemptId": "<id:7>",
             "amountMinor": "200000n",
-            "currency": "NGN"
+            "currency": "NGN",
+            "paymentMethods": ["bank_transfer", "card"]
           }
         ]
       ]
@@ -196,7 +198,8 @@
           {
             "attemptId": "<id:11>",
             "amountMinor": "200000n",
-            "currency": "NGN"
+            "currency": "NGN",
+            "paymentMethods": ["bank_transfer", "card"]
           }
         ]
       ]

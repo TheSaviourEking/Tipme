@@ -121,19 +121,26 @@ const approved = (c: Change) =>
     ? `approved by ${staff(c.approvedBy)}`
     : null;
 
+/** Basis points as staff read them: "5%", "4.5%". */
+const pct = (bps: unknown) => {
+  const n = Number(bps);
+  if (!Number.isInteger(n) || n < 0) return '?';
+  const frac = String(n % 100)
+    .padStart(2, '0')
+    .replace(/0+$/, '');
+  return `${Math.floor(n / 100)}${frac ? `.${frac}` : ''}%`;
+};
 /** A plan fee pair as staff read it: "Free 5%, Pro 3%". */
 const planFees = (value: unknown): string => {
   if (typeof value !== 'object' || value === null) return '—';
   const { freeBps, proBps } = value as Record<string, unknown>;
-  const pct = (bps: unknown) => {
-    const n = Number(bps);
-    if (!Number.isInteger(n) || n < 0) return '?';
-    const frac = String(n % 100)
-      .padStart(2, '0')
-      .replace(/0+$/, '');
-    return `${Math.floor(n / 100)}${frac ? `.${frac}` : ''}%`;
-  };
   return `Free ${pct(freeBps)}, Pro ${pct(proBps)}`;
+};
+/** The card cost (26 Nov 2026): "2% + ₦45, margin ₦15". */
+const cardCost = (value: unknown): string => {
+  if (typeof value !== 'object' || value === null) return '—';
+  const { rateBps, fixedMinor, marginMinor } = value as Record<string, unknown>;
+  return `${pct(rateBps)} + ${naira(fixedMinor)}, margin ${naira(marginMinor)}`;
 };
 
 /** You collect's settings (Task 12): only those that moved, as staff read them. */
@@ -171,6 +178,8 @@ const SENTENCES: Record<string, (c: Change, subject: string) => string> = {
       `TipMe’s fee per plan: ${planFees(c.from)} → ${planFees(c.to)}`,
       approved(c),
     ),
+  'card_costs.changed': (c) =>
+    parts(`Card cost: ${cardCost(c.from)} → ${cardCost(c.to)}`, approved(c)),
   'collect_settings.changed': (c) =>
     parts(
       `You collect limits: ${collectSettingsMoved(c.from, c.to)}`,

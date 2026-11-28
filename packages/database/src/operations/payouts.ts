@@ -1,6 +1,5 @@
 import { createHash } from 'node:crypto';
 import {
-  allocateWithdrawal,
   belowWithdrawalMinimum,
   buildPayoutFeePosting,
   buildPayoutPosting,
@@ -9,9 +8,10 @@ import {
   userPaidWithdrawal,
   canTransition,
   formatMinor,
-  FREE_WITHDRAWALS_PER_DAY,
   lagosDayStart,
   PAYOUT_TRANSITIONS,
+  feeCarrierIndex,
+  requestAllocation,
 } from '@tipme/domain';
 import type { PayoutStatus } from '@tipme/domain';
 import {
@@ -1161,16 +1161,24 @@ export type WithdrawalQuoteResult =
       /** A tip went through a provider that is no longer connected; its money isn't counted. */
       heldElsewhere: boolean;
       /**
-       * Who pays `feeMinor` on a withdrawal asked for now: 'tipme' for a person's page (owner, 18 Nov
-       * 2026: withdrawals are free, covered by the plan fee), and for a business while the
-       * absorbed-fee switch is on or an unused top-up can pay it; otherwise 'user' (a business, since
-       * 12 Nov 2026), which takes it from the amount chosen.
+       * Who pays `feeMinor` on a withdrawal asked for now: 'user' for a person's page on every
+       * withdrawal (owner, 25 Nov 2026) and for a business since 12 Nov 2026, which takes it from the
+       * amount chosen; 'tipme' only when an unused top-up can pay it or, for a business, the
+       * absorbed-fee switch is on.
        */
       feePaidBy: 'user' | 'tipme';
       /**
+       * Every provider read, in drain order (zero ones included): what it can pay now (the request's
+       * cap), its fee and who would pay it. withdrawalFeeFor decides an amount's fee from these.
+       */
+      feeParts: {
+        capMinor: bigint;
+        feeMinor: bigint;
+        feePaidBy: 'user' | 'tipme';
+      }[];
+      /**
        * A person's page: which withdrawal of the Lagos day this one would be (1 for the first, not
-       * counting failed ones), and how many a day are free. 1 and 0 for a business, which has no daily
-       * allowance.
+       * counting failed ones). 1 for a business. `freePerDay` is always 0, kept for the contract.
        */
       ordinalToday: number;
       freePerDay: number;
@@ -1926,17 +1934,26 @@ async function quoteFor(
   );
   const providerMinor = parts.reduce((sum, part) => sum + part.availMinor, 0n);
   const now = input.now ?? new Date();
-  // Not binding (W9): the request decides again under the owner lock.
-  const { payer: feePaidBy } = await guarded(() =>
-    feePayerFor(
-      db,
-      owner,
-      carrier.route,
-      carrier.provider.name,
-      carrier.feeMinor,
-      now,
-    ),
-  );
+  // Ruling R6: who pays can differ by provider (an unused top-up is held at one only), so every
+  // provider read says its own; the screen decides for the amount typed (withdrawalFeeFor) from the
+  // same split the request makes. The overall answer is the full balance's carrier's. A fee waiver
+  // in force makes every part TipMe's. Not binding (W9): the request decides again under the owner
+  // lock. One read after the other: a transaction is one connection.
+  const payers: ('user' | 'tipme')[] = [];
+  for (const part of parts) {
+    const decision = await guarded(() =>
+      feePayerFor(
+        db,
+        owner,
+        part.route,
+        part.provider.name,
+        part.feeMinor,
+        now,
+      ),
+    );
+    payers.push(decision.payer);
+  }
+  const feePaidBy = payers[parts.indexOf(carrier)] ?? 'user';
   const ordinalToday =
     'businessId' in owner
       ? 1
@@ -1968,8 +1985,14 @@ async function quoteFor(
     bankDetailsNeeded: bankDetailsNeeded && heldBack,
     heldElsewhere: reach.heldElsewhere,
     feePaidBy,
+    feeParts: parts.map((part, index) => ({
+      capMinor: part.availMinor,
+      feeMinor: part.feeMinor,
+      feePaidBy: payers[index] ?? 'user',
+    })),
     ordinalToday,
-    freePerDay: 'businessId' in owner ? 0 : FREE_WITHDRAWALS_PER_DAY,
+    // Kept for the contract; nobody has free withdrawals now (owner, 25 Nov 2026).
+    freePerDay: 0,
     destination: activeRoute.destination
       ? {
           bankName: activeRoute.destination.bankName,
@@ -1980,25 +2003,21 @@ async function quoteFor(
 }
 
 /**
- * A person's withdrawal requests on the Lagos calendar day of `now`: those asked for and not wholly
- * failed (`counted`), and how many of them TipMe pays the fee on (`free`, by the parts' stored
- * `fee_payer`). Read under the profile row lock a request already holds, so two at once can't both
- * take the last free slot.
+ * A person's withdrawal requests on the Lagos calendar day of `now` that were asked for and not
+ * wholly failed (`counted`). The quote shows it as the Nth withdrawal.
  */
 async function personsWithdrawalsToday(
   db: Database | Tx,
   profileId: string,
   now: Date,
-): Promise<{ counted: number; free: number }> {
+): Promise<{ counted: number }> {
   const start = lagosDayStart(now);
   const end = new Date(start.getTime() + 86_400_000);
-  // P7: a request is one withdrawal however many parts it has. It counts until every part failed,
-  // and it is free when none of its parts still standing has the person paying the fee.
-  const result = await db.execute<{ counted: number; free: number }>(sql`
-    SELECT count(*)::int AS counted, (count(*) FILTER (WHERE NOT r.paid))::int AS free
+  // P7: a request is one withdrawal however many parts it has. It counts until every part failed.
+  const result = await db.execute<{ counted: number }>(sql`
+    SELECT count(*)::int AS counted
       FROM (
-        SELECT COALESCE(bool_or(${payouts.feePayer} = 'user')
-                          FILTER (WHERE ${payouts.status} <> 'FAILED'), false) AS paid
+        SELECT 1
           FROM ${payouts}
          WHERE ${payouts.profileId} = ${profileId}
            AND ${payouts.createdAt} >= ${start.toISOString()}::timestamptz
@@ -2007,7 +2026,7 @@ async function personsWithdrawalsToday(
         HAVING bool_or(${payouts.status} <> 'FAILED')
       ) r`);
   const row = result.rows[0];
-  return { counted: row?.counted ?? 0, free: row?.free ?? 0 };
+  return { counted: row?.counted ?? 0 };
 }
 
 /**
@@ -2022,29 +2041,22 @@ export interface FeeDecision {
 }
 
 /**
- * Today's rule for who pays the partner's fee on a withdrawal asked for now, with no waiver. A
- * person's own page: TipMe for the first FREE_WITHDRAWALS_PER_DAY withdrawals of the Lagos day
- * (owner, 18 Nov 2026: withdrawals are free twice a day), counted by the stored `fee_payer` of those
- * not failed, waived ones included (they count as free); from the next one the user pays from the
- * amount (the existing user-pays path). When TipMe pays, the whole amount is sent, TipMe tops the fee
- * up from the platform payment reserve before the payout (coverFee, or an unused top-up), and books
- * the partner's real fee as its own cost when the payout is paid. A business pays from the amount
- * (owner, 12 Nov 2026), unless an unused top-up TipMe already sent to its account can pay it
- * (fee-credits.ts, a read: nothing is claimed here). The `business_payout_fee_absorbed` switch that
- * once came first is now the business kind rule (migration 0130).
+ * Today's rule for who pays the partner's fee on a withdrawal asked for now, with no waiver.
+ * Everyone pays it from the amount (the existing user-pays path): a person on every withdrawal
+ * (owner, 25 Nov 2026; it replaces 18 Nov's two free a day) and a business since 12 Nov 2026. One
+ * exception, TipMe paying: an unused top-up TipMe already sent to the account pays it
+ * (fee-credits.ts, a read: nothing is claimed here), so that money is neither stranded nor counted
+ * twice. When TipMe pays, the whole amount is sent, TipMe tops the fee up from the platform payment
+ * reserve before the payout (coverFee, or an unused top-up), and books the partner's real fee as
+ * its own cost when the payout is paid. The `business_payout_fee_absorbed` switch that once came
+ * first for a business is now the business kind waiver rule (migration 0131).
  */
 async function defaultFeePayer(
   db: Database | Tx,
-  owner: MoneyOwner,
   route: { accountReference: string | null },
   providerName: string,
   feeMinor: bigint,
-  now: Date,
 ): Promise<'user' | 'tipme'> {
-  if (!('businessId' in owner)) {
-    const today = await personsWithdrawalsToday(db, owner.profileId, now);
-    return today.free < FREE_WITHDRAWALS_PER_DAY ? 'tipme' : 'user';
-  }
   if (!route.accountReference || feeMinor <= 0n) return 'user';
   const credit = await freeFeeCredit(db, {
     accountRef: route.accountReference,
@@ -2073,14 +2085,7 @@ async function feePayerFor(
   // The waiver first, then today's rule, which a waiver still needs: only a fee the account would
   // have paid counts as waived (W8). One read after the other: a transaction is one connection.
   const waiver = await feeWaiverFor(db, { owner, fee: 'withdrawal', now });
-  const payer = await defaultFeePayer(
-    db,
-    owner,
-    route,
-    providerName,
-    feeMinor,
-    now,
-  );
+  const payer = await defaultFeePayer(db, route, providerName, feeMinor);
   if (waiver.payer === 'tipme')
     return {
       payer: 'tipme',
@@ -2150,6 +2155,11 @@ export async function providerBalanceAt(
 type RequestInput = {
   amountMinor: bigint;
   idempotencyKey: string;
+  /**
+   * Who the quote the person confirmed showed paying the transfer fee (Ruling R6). Absent from a
+   * screen loaded before this release: then the payer is decided here as it always was.
+   */
+  feePaidBy?: 'user' | 'tipme';
   /** Every configured provider; the request may be paid through those in the owner's set (§5). */
   providers: PayoutProviderSet;
   traceId?: string | null;
@@ -2200,19 +2210,6 @@ export function requestBusinessWithdrawal(
   input: RequestInput & { businessId: string; userId: string },
 ): Promise<RequestResult> {
   return requestFor(db, { businessId: input.businessId }, input, input.userId);
-}
-
-/** What each provider carries of `totalMinor` drawn in drain order (the quote's takes, spec §5). */
-function drainTakes(
-  capsMinor: readonly bigint[],
-  totalMinor: bigint,
-): bigint[] {
-  let remaining = totalMinor;
-  return capsMinor.map((cap) => {
-    const take = lower(remaining, cap);
-    remaining -= take;
-    return take;
-  });
 }
 
 /** One provider the request may draw from: read, usable, and on the bank the screen shows. */
@@ -2433,32 +2430,30 @@ async function requestFor(
       // provider (spec §5). Taking everything is always allowed, also when the ledger, not a
       // provider, is what runs out: then each provider carries what the quote said it would (its
       // take in drain order), so every part empties what it can give.
-      const allocation =
-        allocateWithdrawal(input.amountMinor, capsMinor) ??
-        (input.amountMinor === withdrawable
-          ? allocateWithdrawal(
-              input.amountMinor,
-              drainTakes(capsMinor, withdrawable),
-            )
-          : null);
+      // The same split the screen asks withdrawalFeeFor about (Ruling R6), so both agree on who pays.
+      const allocation = requestAllocation(
+        input.amountMinor,
+        capsMinor,
+        withdrawable,
+      );
       if (!allocation) throw new OperationError('WITHDRAWAL_TOO_SMALL');
       const chosen = read.parts.flatMap((part, index) => {
         const amountMinor = allocation[index] ?? 0n;
         return amountMinor > 0n ? [{ ...part, amountMinor }] : [];
       });
-      const [head, ...rest] = chosen;
-      if (!head) throw new OperationError('INSUFFICIENT_BALANCE');
+      const carrierPart = read.parts[feeCarrierIndex(allocation)];
+      if (chosen.length === 0 || !carrierPart)
+        throw new OperationError('INSUFFICIENT_BALANCE');
       // The fee is decided once for the request (spec §5): whoever pays it pays it once, off the
       // largest part (the first in drain order among equals), so the small parts never fall below
-      // it. TipMe pays every other part's fee. A person's page: TipMe pays on the first two
-      // requests of the Lagos day, however many parts each has (P7); from the 3rd the fee comes off
-      // the amount chosen (owner, 18 Nov 2026). A business: one fee under its own rule (owner, 12
-      // and 23 Nov 2026). Decided here under the owner lock. Nothing can be sent when the largest
-      // part is not more than its fee.
-      const carrier = rest.reduce(
-        (best, part) => (part.amountMinor > best.amountMinor ? part : best),
-        head,
+      // it. TipMe pays every other part's fee. A person pays it from the amount chosen on every
+      // request, however many parts it has (owner, 25 Nov 2026). A business: one fee under its own
+      // rule (owner, 12 and 23 Nov 2026). Decided here under the owner lock. Nothing can be sent when
+      // the largest part is not more than its fee.
+      const carrier = chosen.find(
+        (part) => part.provider === carrierPart.provider,
       );
+      if (!carrier) throw new OperationError('INSUFFICIENT_BALANCE');
       // Under a fee waiver every part is TipMe's and records the rule; only the carrier records the
       // one fee the account would have paid (W8, spec §7a).
       const decision = await feePayerFor(
@@ -2469,6 +2464,12 @@ async function requestFor(
         carrier.feeMinor,
         input.now ?? new Date(),
       );
+      // Ruling R6: never a fee the person didn't see. A top-up used up, or a waiver started or
+      // ended, since the quote: nothing is recorded, and the screen shows the new fee to confirm again.
+      // TODO(next release): require feePaidBy. A screen from before R6 sends none, and is decided
+      // here without the check, so it can still be charged a fee it didn't show.
+      if (input.feePaidBy !== undefined && input.feePaidBy !== decision.payer)
+        throw new OperationError('WITHDRAWAL_FEE_CHANGED');
       const userPaid =
         decision.payer === 'user'
           ? userPaidWithdrawal({

@@ -884,9 +884,23 @@ export interface OpsPagePricing {
   feeBps: number;
 }
 
-/** Staff set one page's TipMe fee in basis points (600 = 6%), or clear it with null (ADR-0014). Capped at the plan's rate when quoted. */
+/** The lowest page rate staff may set other than 0 (profit guards, 26 Nov 2026): 2%, like the plan rates. */
+export const PAGE_FEE_MIN_BPS = 200;
+
+/**
+ * Staff set one page's TipMe fee in basis points (600 = 6%), or clear it with null (ADR-0014). Capped
+ * at the plan's rate when quoted. A rate is null, 0 (fee-free, a deliberate grant) or 200 and up.
+ */
 export const opsPageFeeSchema = opsReasonSchema
-  .extend({ feeBps: z.number().int().min(0).max(10000).nullable() })
+  .extend({
+    feeBps: z
+      .number()
+      .int()
+      .min(0)
+      .max(10000)
+      .refine((value) => value === 0 || value >= PAGE_FEE_MIN_BPS)
+      .nullable(),
+  })
   .strict();
 export type OpsPageFeeRequest = z.infer<typeof opsPageFeeSchema>;
 

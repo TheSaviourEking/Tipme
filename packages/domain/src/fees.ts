@@ -59,7 +59,8 @@ export interface PlanFeeRates {
 
 /**
  * The owner's pricing, 18 Nov 2026 (docs/00-DECISIONS.md D-05 addendum): TipMe Free keeps 5% of each
- * tip and TipMe Pro 3%, processing and withdrawal fees included (TipMe pays both from its share).
+ * tip and TipMe Pro 3%, payment processing included (TipMe pays it from its share). Each withdrawal
+ * costs the person the partner's ₦50 (owner, 25 Nov 2026), so withdrawal fees are not in the rate.
  * Staff can change the two rates at /ops/plan-fees (two people, audited); these are the coded
  * defaults, used only when no rate row exists or the stored one is invalid. A database error is not
  * covered: the quote fails rather than price from defaults.
@@ -75,24 +76,46 @@ const V3_VERSION_PREFIX: Record<FeePlan, string> = {
   pro: 'v3-pro',
 };
 
-/** The owner's bounds, 18 Nov 2026: each plan's rate is from 1.5% to 10% (150 to 1000 bps). */
-export const PLAN_FEE_MIN_BPS = 150n;
+/**
+ * The bounds for a rate staff set: 2% to 10% (200 to 1000 bps). The floor is the profit guard of
+ * 26 Nov 2026 (it was 1.5% from the owner's 18 Nov bounds): below the 1.5% transfer cost a tip loses.
+ */
+export const PLAN_FEE_MIN_BPS = 200n;
 export const PLAN_FEE_MAX_BPS = 1000n;
+/**
+ * The lowest rate a stored row may hold: the table still allows 150 to 199, so an existing row stays
+ * valid, priceable and visible (flagged on the ops screens) rather than silently replaced.
+ */
+export const PLAN_FEE_STORED_MIN_BPS = 150n;
+
+function planFeeRatesProblemFrom(
+  rates: { freeBps: bigint; proBps: bigint },
+  min: bigint,
+): 'freeBps' | 'proBps' | 'proAboveFree' | null {
+  const inRange = (bps: bigint) => bps >= min && bps <= PLAN_FEE_MAX_BPS;
+  if (!inRange(rates.freeBps)) return 'freeBps';
+  if (!inRange(rates.proBps)) return 'proBps';
+  if (rates.proBps > rates.freeBps) return 'proAboveFree';
+  return null;
+}
 
 /**
- * Why a pair of plan rates is not allowed, or null when it is: each a whole number of basis points
- * from 150 to 1000 (1.5% to 10%), and Pro never above Free (the owner, 18 Nov 2026).
+ * Why a pair of plan rates may not be newly set, or null when it may: each a whole number of basis
+ * points from 200 to 1000 (2% to 10%), and Pro never above Free.
  */
 export function planFeeRatesProblem(rates: {
   freeBps: bigint;
   proBps: bigint;
 }): 'freeBps' | 'proBps' | 'proAboveFree' | null {
-  const inRange = (bps: bigint) =>
-    bps >= PLAN_FEE_MIN_BPS && bps <= PLAN_FEE_MAX_BPS;
-  if (!inRange(rates.freeBps)) return 'freeBps';
-  if (!inRange(rates.proBps)) return 'proBps';
-  if (rates.proBps > rates.freeBps) return 'proAboveFree';
-  return null;
+  return planFeeRatesProblemFrom(rates, PLAN_FEE_MIN_BPS);
+}
+
+/** The same check for a pair already stored or in force: floor 150, so older rows still price. */
+export function storedPlanFeeRatesProblem(rates: {
+  freeBps: bigint;
+  proBps: bigint;
+}): 'freeBps' | 'proBps' | 'proAboveFree' | null {
+  return planFeeRatesProblemFrom(rates, PLAN_FEE_STORED_MIN_BPS);
 }
 
 /**
@@ -104,7 +127,7 @@ export function feePolicyForPlan(
   plan: FeePlan,
   rates: PlanFeeRates = DEFAULT_PLAN_FEE_RATES,
 ): FeePolicy {
-  if (planFeeRatesProblem(rates) !== null)
+  if (storedPlanFeeRatesProblem(rates) !== null)
     throw new RangeError('plan fee rates out of bounds');
   const bps = plan === 'pro' ? rates.proBps : rates.freeBps;
   return {
@@ -163,9 +186,13 @@ export class AmountOutOfRangeError extends Error {
   override readonly name = 'AmountOutOfRangeError';
 }
 
-/** Basis-point fee, rounded half up to the minor unit, in integer arithmetic. */
-const bpsOf = (amount: bigint, bps: bigint): bigint =>
+/**
+ * Basis-point fee, rounded half up to the minor unit, in integer arithmetic. Exported so the card
+ * offer line on staff screens prices TipMe's share exactly as a quote does.
+ */
+export const basisPointsOf = (amount: bigint, bps: bigint): bigint =>
   (amount * bps + 5000n) / 10000n;
+const bpsOf = basisPointsOf;
 
 /** The version recorded on a quote whose TipMe fee was waived (a fee-free reward, PR-008). */
 export const FEE_FREE_VERSION_SUFFIX = '-fee-free';
@@ -304,11 +331,11 @@ export function belowWithdrawalMinimum(
 }
 
 /**
- * Withdrawals from a person's page that are free each Lagos calendar day (owner, 18 Nov 2026): TipMe
- * pays our payment partner's fee on the first this many. From the next one the user pays it from the
- * amount. Businesses are not counted. The one place this number is written.
+ * What our payment partner charges for one NGN withdrawal, for copy only (owner, 25 Nov 2026: people
+ * pay it on every withdrawal). Web copy cannot import @tipme/payments, so this mirrors its
+ * NGN_PAYOUT_FEE_MINOR (the one the payout code uses); a web test fails if the two ever differ.
  */
-export const FREE_WITHDRAWALS_PER_DAY = 2;
+export const WITHDRAWAL_FEE_COPY_MINOR = 5000n;
 
 /** Lagos is UTC+1 all year (no daylight saving). */
 const LAGOS_OFFSET_MS = 3_600_000;

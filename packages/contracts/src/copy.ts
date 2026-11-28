@@ -112,6 +112,23 @@ export const WITHDRAW_SPLIT_COPY = {
 } as const;
 
 /**
+ * The transfer fee on a withdrawal (profit guards). The fee comes in already formatted (₦50), from
+ * the payout fee constant: this file has no imports. Never the partner's name.
+ */
+export const WITHDRAW_FEE_COPY = {
+  /** The person pays it, from the amount. */
+  line: (fee: string) =>
+    `Transfer fee: ${fee}, charged by our payment partner. It comes off the amount you withdraw.`,
+  /** An unused top-up or a waiver covers it, for this withdrawal only: never "withdrawals are free". */
+  tipmePays:
+    'TipMe pays the transfer fee on this withdrawal: you receive the whole amount.',
+  /** WITHDRAWAL_BELOW_FEE: nothing would arrive. */
+  belowFee: (fee: string) =>
+    `The amount must be more than the ${fee} transfer fee, which comes off it.`,
+  /** WITHDRAWAL_FEE_CHANGED (Ruling R6): who pays changed since the quote; nothing was recorded. */
+  changed: 'The transfer fee changed. Check the new amount and confirm again.',
+} as const;
+/**
  * A person's first withdrawal (owner, 26 Nov 2026): their first time on our payment partner's identity
  * check, and the first payout then takes hours. Never a provider's name: always "our payment partner".
  * A business's Money section doesn't use these.
@@ -206,11 +223,6 @@ export const FEE_WAIVER_STAFF_COPY = {
   accountPays: 'Account pays',
   tipmePays: (until: string | null) =>
     until === null ? 'TipMe pays' : `TipMe pays · ${until}`,
-  /**
-   * A person's withdrawal fee under today's rule. Kept here alone: the profit-guards branch changes
-   * the rule and this line with it (R17).
-   */
-  individualWithdrawalDefault: '2 free a day, then account',
   /** Businesses have no tip fee (spec §2). */
   noFee: '—',
   incomeGivenUp: 'Fee income given up',

@@ -134,7 +134,10 @@ test('a split owner sees one balance, withdraws, and sees two parts', async ({
   const hint = main(page).getByTestId('withdraw-split-hint');
   await expect(hint).toHaveCount(0);
   await page.getByLabel('Amount (NGN)').fill('3800');
-  await expect(page.getByTestId('you-receive')).toHaveText('₦3,800');
+  // The person pays one ₦50 for the request, off its largest part (the first among equals); TipMe
+  // pays the other part's (owner, 23 and 25 Nov 2026).
+  await expect(page.getByTestId('transfer-fee')).toHaveText('₦50');
+  await expect(page.getByTestId('you-receive')).toHaveText('₦3,750');
   await expect(hint).toHaveText('This may arrive as 2 payments.');
   await expect(main(page)).not.toContainText(/mock/i);
   await expectAccessible(page);
@@ -151,18 +154,18 @@ test('a split owner sees one balance, withdraws, and sees two parts', async ({
   );
   const receiptParts = receipt.locator('.withdraw__parts > li');
   await expect(receiptParts).toHaveCount(2);
-  await expect(receiptParts.nth(0)).toContainText('₦1,900');
+  await expect(receiptParts.nth(0)).toContainText('₦1,850');
   await expect(receiptParts.nth(1)).toContainText('₦1,900');
 
   // The page re-read its balance and list after the request, with no live event to prompt it.
   await expect(page.getByTestId('withdraw-available')).toHaveText('₦0');
-  // The list: one row for the request, its total and its two payments.
+  // The list: one row for the request, what it sends and its two payments.
   const history = page.getByRole('region', { name: 'Your withdrawals' });
-  const row = history.getByRole('listitem').filter({ hasText: '₦3,800' });
+  const row = history.getByRole('listitem').filter({ hasText: '₦3,750' });
   await expect(row).toHaveCount(1);
   const rowParts = row.locator('.withdraw__parts > li');
   await expect(rowParts).toHaveCount(2);
-  await expect(rowParts.nth(0)).toContainText(/₦1,900 (on its way|sent)/);
+  await expect(rowParts.nth(0)).toContainText(/₦1,850 (on its way|sent)/);
   await expect(rowParts.nth(1)).toContainText(/₦1,900 (on its way|sent)/);
   await expect(main(page)).not.toContainText(/mock/i);
   await expectAccessible(page);
@@ -242,13 +245,14 @@ for (const width of [390, 1440])
     );
     const parts = receipt.locator('.withdraw__parts > li');
     await expect(parts).toHaveCount(2);
-    await expect(parts.nth(0)).toHaveText('₦1,900 on its way');
+    // One ₦50 for the request, off the first of the two equal parts.
+    await expect(parts.nth(0)).toHaveText('₦1,850 on its way');
     await expect(parts.nth(1)).toHaveText('₦1,900 on its way');
     await expect(page.getByTestId('withdraw-available')).toHaveText('₦0');
     const row = page
       .getByRole('region', { name: 'Your withdrawals' })
       .getByRole('listitem')
-      .filter({ hasText: '₦3,800' });
+      .filter({ hasText: '₦3,750' });
     await expect(row.locator('.withdraw__parts > li')).toHaveCount(2);
     await expect(main(page)).not.toContainText(/mock/i);
     await expectAccessible(page);

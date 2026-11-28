@@ -5,6 +5,7 @@ import {
   ProRefundRefusedError,
   SavedCardRefusedError,
   TipRefundRefusedError,
+  type CheckoutMethod,
   type FeePaidBy,
   type NormalizedProviderEvent,
   type PaymentProvider,
@@ -594,11 +595,28 @@ export function createBachsProvider(
     };
   }
 
+  /** Both methods, in today's order: what an omitted `paymentMethods` sends. */
+  const ALL_PARTNER_METHODS = ['NGN_CARD', 'NGN_BANK_TRANSFER'];
+
+  /** Maps TipMe's methods to the partner's, in the order given. Empty or unknown is refused. */
+  function partnerMethods(methods: readonly CheckoutMethod[]): string[] {
+    if (methods.length === 0)
+      throw new TypeError('A checkout needs at least one payment method');
+    if (new Set(methods).size !== methods.length)
+      throw new TypeError('A checkout payment method may be listed only once');
+    return methods.map((method) => {
+      if (method === 'card') return 'NGN_CARD';
+      if (method === 'bank_transfer') return 'NGN_BANK_TRANSFER';
+      throw new TypeError(`Unknown checkout payment method: ${String(method)}`);
+    });
+  }
+
   /**
    * A checkout on TipMe's own account (paid Pro, You collect): no X-Account-Id, no platform fee,
    * naira methods only, TipMe bears the fee. `extra` goes last (Pro's saved card).
    */
   async function ownCheckout(input: {
+    paymentMethods?: readonly CheckoutMethod[];
     reference: string;
     amountMinor: bigint;
     idempotencyKey: string;
@@ -627,7 +645,9 @@ export function createBachsProvider(
           success_url: input.successUrl,
           cancel_url: input.cancelUrl,
           customer_creation: 'if_required',
-          payment_method_types: ['NGN_CARD', 'NGN_BANK_TRANSFER'],
+          payment_method_types: input.paymentMethods
+            ? partnerMethods(input.paymentMethods)
+            : ALL_PARTNER_METHODS,
           customer_bears_fee: false,
           expires_in_minutes: PLATFORM_CHECKOUT_MINUTES,
           ...input.extra,
@@ -761,6 +781,7 @@ export function createBachsProvider(
       let idempotencyKey: string;
       let successUrl: string;
       let cancelUrl: string;
+      let methods: string[];
       try {
         if (
           !input.recipientAccountReference ||
@@ -794,6 +815,9 @@ export function createBachsProvider(
 
         successUrl = validateHttpsOrLocalUrl(input.successUrl);
         cancelUrl = validateHttpsOrLocalUrl(input.cancelUrl);
+        methods = input.paymentMethods
+          ? partnerMethods(input.paymentMethods)
+          : ALL_PARTNER_METHODS;
       } catch (error) {
         throw new BachsRequestNotSentError(
           error instanceof Error ? error.message : 'Invalid Bachs checkout',
@@ -810,7 +834,7 @@ export function createBachsProvider(
         cancel_url: cancelUrl,
         customer_creation: 'if_required',
         // TipMe quotes and books naira only: Bachs must not offer crypto or other currencies.
-        payment_method_types: ['NGN_CARD', 'NGN_BANK_TRANSFER'],
+        payment_method_types: methods,
       };
       if (input.tipmeShareMinor > 0n) {
         body['platform_fee'] = minorToDecimal(
@@ -903,6 +927,7 @@ export function createBachsProvider(
         if (input.currency !== 'NGN')
           throw new TypeError('TipMe takes tips in naira only');
         providerIdentifier(input.attemptId, 'attempt reference');
+        if (input.paymentMethods) partnerMethods(input.paymentMethods);
         checked = checkedOwnCheckout(input);
       } catch (error) {
         throw new BachsRequestNotSentError(
@@ -915,6 +940,9 @@ export function createBachsProvider(
         amountMinor: input.amountMinor,
         idempotencyKey: input.idempotencyKey,
         ...checked,
+        ...(input.paymentMethods
+          ? { paymentMethods: input.paymentMethods }
+          : {}),
       });
     },
 

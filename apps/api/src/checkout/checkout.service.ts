@@ -5,7 +5,9 @@ import type {
   TipQuote,
   TipQuoteRequest,
 } from '@tipme/contracts';
+import { checkoutMethodsFor } from '@tipme/domain';
 import {
+  cardCostAt,
   claimAttemptStart,
   createPaymentIntent,
   createQuote,
@@ -19,6 +21,7 @@ import {
   markAttemptInitiated,
   OperationError,
   featureOn,
+  guarded,
 } from '@tipme/database';
 import {
   BachsApiError,
@@ -267,6 +270,14 @@ export class CheckoutService {
 
     const quote = await findQuoteCharge(db, request.quoteId);
     if (!quote) throw new OperationError('QUOTE_NOT_FOUND');
+    // Profit guards (Part 2): card only when TipMe's quoted share covers the card cost as it stood
+    // when the quote was made, so every start of this attempt sends the same list (the idempotency
+    // key does not include it). Bank transfer always. A database error fails the start.
+    const paymentMethods = checkoutMethodsFor({
+      amountMinor: quote.payerTotalMinor,
+      tipmeShareMinor: quote.platformFeeMinor + quote.providerFeeMinor,
+      card: await guarded(() => cardCostAt(db, quote.createdAt)),
+    });
 
     if (providerName === 'bachs') {
       if (!this.bachsProvider)
@@ -302,6 +313,7 @@ export class CheckoutService {
             successUrl,
             cancelUrl,
             idempotencyKey,
+            paymentMethods,
           });
       } else {
         const accountReference = await getReadyPaymentAccount(db, {
@@ -321,6 +333,7 @@ export class CheckoutService {
             successUrl,
             cancelUrl,
             idempotencyKey,
+            paymentMethods,
           });
       }
       // Logged only for collect, so direct starts log exactly as before.
@@ -429,12 +442,14 @@ export class CheckoutService {
         successUrl: new URL(`/tip/${intent.tipId}`, this.webOrigin).toString(),
         cancelUrl: new URL(`/tip/${intent.tipId}`, this.webOrigin).toString(),
         idempotencyKey: `tipme-checkout-${intent.attemptId}`,
+        paymentMethods,
       });
     } else {
       started = await this.mockProvider.initializePayment({
         attemptId: intent.attemptId,
         amountMinor: quote.payerTotalMinor,
         currency: quote.currency,
+        paymentMethods,
       });
     }
     // You collect (fix round 4): opening a checkout, so an expired collect quote is refused here

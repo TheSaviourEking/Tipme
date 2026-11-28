@@ -1,4 +1,9 @@
-import { feePolicyForPlan, planShareBps, type FeePlan } from '@tipme/domain';
+import {
+  feePolicyForPlan,
+  PLAN_FEE_MIN_BPS,
+  planShareBps,
+  type FeePlan,
+} from '@tipme/domain';
 import { planFeeRatesInForce } from './plan-fee-rates.js';
 import { and, eq, ne } from 'drizzle-orm';
 import type { Database } from '../client.js';
@@ -24,7 +29,10 @@ export function setAccountFee(
     input.feeBps !== null &&
     (!Number.isInteger(input.feeBps) ||
       input.feeBps < 0 ||
-      input.feeBps > 10000)
+      input.feeBps > 10000 ||
+      // The 2% floor (profit guards, Part 3): 0 is fee-free, a deliberate grant. Checked here too, so
+      // an approval asked for before the floor existed can't write a rate under it.
+      (input.feeBps !== 0 && BigInt(input.feeBps) < PLAN_FEE_MIN_BPS))
   )
     return Promise.reject(new OperationError('INVALID_INPUT'));
   return guarded(() =>

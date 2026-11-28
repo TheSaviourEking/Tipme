@@ -115,7 +115,7 @@ test('@alone staff set an account waiver with an end date; a second person appro
       'Tip fee: Follows the global setting (now: Account pays)',
     );
     await expect(card.getByTestId('fee-waiver-withdrawal')).toHaveText(
-      'Withdrawal fee: Follows the global setting (now: 2 free a day, then account)',
+      'Withdrawal fee: Follows the global setting (now: Account pays)',
     );
     await expect(card).toContainText('Fee income given up');
     await expect(card).toContainText('Cash paid by TipMe');
@@ -156,7 +156,7 @@ test('@alone staff set an account waiver with an end date; a second person appro
       `Tip fee: TipMe pays · ${end.until}`,
     );
     await expect(after.getByTestId('fee-waiver-withdrawal')).toHaveText(
-      'Withdrawal fee: Follows the global setting (now: 2 free a day, then account)',
+      'Withdrawal fee: Follows the global setting (now: Account pays)',
     );
     await expectAccessible(page);
   } finally {
@@ -196,7 +196,7 @@ test('the grid shows the carried-over business rule and the paused label', async
     'Account pays',
   );
   await expect(row('Individuals').getByRole('cell').nth(1)).toHaveText(
-    '2 free a day, then account',
+    'Account pays',
   );
   await expect(row('Giving (not live)')).toBeVisible();
   await expect(row('Individuals').getByRole('cell').nth(2)).toContainText(

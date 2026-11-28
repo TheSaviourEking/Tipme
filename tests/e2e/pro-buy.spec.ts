@@ -176,7 +176,7 @@ test('Settings Plan: buy by bank transfer, confirmed by the partner, then one mo
   await expect(plan).toContainText('Your page is on the Free plan.');
   // The owner's pricing, 12 Nov 2026: the plan sets TipMe's share of each new tip.
   await expect(plan).toContainText(
-    'TipMe keeps 5% of each tip on Free, payment and withdrawal fees included. On Pro it keeps 3%.',
+    'TipMe keeps 5% of each tip on Free, payment processing included. On Pro it keeps 3%.',
   );
   await expect(plan).toContainText('₦5,000 a month');
   await expect(plan).toContainText('card or bank transfer');
@@ -212,7 +212,7 @@ test('Settings Plan: buy by bank transfer, confirmed by the partner, then one mo
   ).toBeVisible({ timeout: 20_000 });
   await expect(plan).toContainText(/You’re on Pro, paid until \d{1,2} \w{3}/);
   await expect(plan).toContainText(
-    'TipMe keeps 3% of each tip while you’re on Pro, instead of 5% on Free. Payment and withdrawal fees are included.',
+    'TipMe keeps 3% of each tip while you’re on Pro, instead of 5% on Free. Payment processing is included.',
   );
   await expect(plan.locator('.tm-pro-badge')).toBeVisible();
 

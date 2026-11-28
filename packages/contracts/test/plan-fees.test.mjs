@@ -22,7 +22,7 @@ test('plan_fees.change is a serious action on fees.manage, which is sensitive', 
   assert.equal(OPS_CATALOGUE['fees.manage'].sensitive, true);
 });
 
-test('a change takes whole basis points 150 to 1000, Pro never above Free', () => {
+test('a change takes whole basis points 200 to 1000, Pro never above Free', () => {
   const ok = (freeBps, proBps, extra = {}) =>
     opsPlanFeesChangeSchema.safeParse({
       freeBps,
@@ -30,11 +30,15 @@ test('a change takes whole basis points 150 to 1000, Pro never above Free', () =
       reason: REASON,
       ...extra,
     }).success;
-  assert.equal(PLAN_FEE_MIN_BPS, 150);
+  assert.equal(PLAN_FEE_MIN_BPS, 200);
   assert.equal(PLAN_FEE_MAX_BPS, 1000);
   assert.equal(PLAN_FEE_LARGE_CHANGE_BPS, 200);
   assert.equal(ok('500', '300'), true);
-  assert.equal(ok('150', '150'), true);
+  assert.equal(ok('200', '200'), true);
+  // Profit guards (Part 3): 2% is the floor; 1.5% to 1.99% is refused.
+  assert.equal(ok('199', '199'), false);
+  assert.equal(ok('500', '199'), false);
+  assert.equal(ok('150', '150'), false);
   assert.equal(ok('1000', '1000'), true);
   assert.equal(ok('500', '500'), true);
   assert.equal(ok('300', '500'), false);

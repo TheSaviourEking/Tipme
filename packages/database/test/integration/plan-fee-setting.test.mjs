@@ -226,6 +226,10 @@ test('out-of-range rates, and Pro above Free, are refused; the stored rates stay
     [-1n, 0n],
     [0n, 0n],
     [149n, 149n],
+    // Profit guards, Part 3: 2% is the floor for a new setting.
+    [199n, 199n],
+    [150n, 150n],
+    [500n, 199n],
     [1001n, 300n],
     [10001n, 300n],
     [500n, 149n],
@@ -242,6 +246,32 @@ test('out-of-range rates, and Pro above Free, are refused; the stored rates stay
   const rates = await planFeeRatesInForce(db.db);
   assert.equal(rates.freeBps, 450n);
   assert.equal(rates.proBps, 250n);
+});
+
+test('a rate stored below the floor before it existed still prices quotes and reads back; a new setting must be 200 or more', async (t) => {
+  const { db, set, quote } = await setup(t);
+  await db.pool.query(
+    `INSERT INTO plan_fee_rates (id, free_bps, pro_bps, effective_from, reason)
+     VALUES (gen_random_uuid(), 150, 150, now() + interval '10 seconds', 'before the floor')`,
+  );
+  const later = new Date(Date.now() + 60_000);
+  const rates = await planFeeRatesInForce(db.db, later);
+  assert.equal(rates.source, 'setting');
+  assert.equal(rates.freeBps, 150n);
+  assert.equal(rates.proBps, 150n);
+  const old = await quote(later);
+  assert.equal(old.feePolicyVersion, 'v3-free-150bps');
+  // Saving anything below 200 is refused, 200 is saved.
+  await assert.rejects(
+    set(150n, 150n),
+    (error) => error.code === 'INVALID_INPUT',
+  );
+  await set(200n, 200n, new Date(later.getTime() + 60_000));
+  assert.equal(
+    (await planFeeRatesInForce(db.db, new Date(later.getTime() + 120_000)))
+      .freeBps,
+    200n,
+  );
 });
 
 test('the rates table is history: rows cannot be updated or deleted', async (t) => {

@@ -234,7 +234,7 @@ export async function openTestDatabase(): Promise<TestDatabase> {
                 clock_timestamp()
            FROM added`,
       );
-      // And the business withdrawal fee rule 0130 carries over from the retired switch (fee waivers
+      // And the business withdrawal fee rule 0131 carries over from the retired switch (fee waivers
       // W15), as on a database where the switch was off: the business pays. Same id and text.
       await client.query(
         `WITH added AS (

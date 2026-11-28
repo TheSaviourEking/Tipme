@@ -68,3 +68,17 @@ test('tipAmountsSchema takes an optional or null startMinor in kobo', async () =
   assert.equal(ok({ startMinor: '10.5' }), false);
   assert.equal(ok({ startMinor: 1000000 }), false, 'a number is not kobo');
 });
+
+// Ruling R6 (profit guards): a person is never charged a fee they did not see. The request says who
+// the quote showed paying the transfer fee; a client from before this release sends no payer.
+test('a withdrawal request carries the quoted fee payer, or none from an older client', async () => {
+  const { withdrawalRequestSchema, apiErrorCodes: codes } =
+    await import('../dist/index.js');
+  const ok = (body) => withdrawalRequestSchema.safeParse(body).success;
+  assert.equal(ok({ amountMinor: '500000' }), true);
+  assert.equal(ok({ amountMinor: '500000', feePaidBy: 'user' }), true);
+  assert.equal(ok({ amountMinor: '500000', feePaidBy: 'tipme' }), true);
+  assert.equal(ok({ amountMinor: '500000', feePaidBy: 'business' }), false);
+  assert.equal(ok({ amountMinor: '500000', feePaidBy: null }), false);
+  assert.ok(codes.includes('WITHDRAWAL_FEE_CHANGED'));
+});

@@ -319,6 +319,12 @@ export const OPS_FRESH_CODE_EXEMPT: Record<
     reason:
       'One business’s withdrawal fee setting and this month’s waived cost: no contact, card or bank details; changes nothing.',
   },
+  'OpsCardCostsController.state': {
+    verb: 'GET',
+    permission: 'fees.manage',
+    reason:
+      'What a card payment costs TipMe and its history: rates, amounts, reasons and staff ids, nobody’s private details.',
+  },
   'OpsCollectSettingsController.state': {
     verb: 'GET',
     permission: 'fees.manage',
@@ -466,6 +472,8 @@ export const SERIOUS_ACTIONS = [
   'tip.refund',
   // Owner, 18 Nov 2026: TipMe's share per plan (Free, Pro), for new quotes only.
   'plan_fees.change',
+  // Owner, 26 Nov 2026: what a card payment costs TipMe (rate, 3D Secure, margin), for card offers.
+  'card_costs.change',
   // You collect (plan Task 12, spec §9, R11): its settings, and staff's pause of every collect transfer.
   'collect_settings.change',
   'collect_transfers.pause',
@@ -512,6 +520,7 @@ export const SERIOUS_ACTION_WORDS: Record<SeriousAction, string> = {
   'announcement.send': 'Send an announcement by email',
   'tip.refund': 'Refund a tip (TipMe keeps its fee)',
   'plan_fees.change': 'Change TipMe’s fee per plan',
+  'card_costs.change': 'Change the card cost TipMe checks before offering card',
   'collect_settings.change': 'Change the You collect limits',
   'collect_transfers.pause': 'Pause every You collect transfer',
   'collect_transfers.resume': 'Resume You collect transfers',
@@ -556,6 +565,7 @@ export const SERIOUS_ACTION_PERMISSIONS: Record<SeriousAction, OpsPermission> =
     'announcement.send': 'announcements.send',
     'tip.refund': 'payments.repair',
     'plan_fees.change': 'fees.manage',
+    'card_costs.change': 'fees.manage',
     'collect_settings.change': 'fees.manage',
     'collect_transfers.pause': 'payments.repair',
     'collect_transfers.resume': 'payments.repair',
