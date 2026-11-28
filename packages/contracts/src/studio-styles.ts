@@ -5,12 +5,13 @@
  * from the addendum 2026-11-27-studio-creator-professional-design) and one of eight tested
  * accents; it never stores a colour. This registry holds only what the API, the design check and
  * the editor must know: each style's neutrals per mode, its defaults, and the accent table. Radii,
- * type sizes, spacing and motion live in each style's CSS. Every value is copied from the spec (which copies the canvas);
- * the exhaustive contrast test proves every style × accent × mode pair.
+ * type sizes, spacing and motion live in each style's CSS. Every value is copied from the spec
+ * (which copies the canvas); the exhaustive contrast test proves every style × accent × mode pair.
  */
 
 import {
   blend,
+  contrastRatio,
   hexToOklch,
   oklchToHex,
   type Hex,
@@ -649,11 +650,14 @@ export function studioDeep(
   dark: StudioAccentValues,
   mode: 'light' | 'dark',
 ): { fill: Hex; label: Hex } {
-  const ink = STUDIO_ACCENTS.ink.light;
-  const inkLight = light.fill === ink.fill && light.label === ink.label;
-  const pair = mode === 'dark' && inkLight ? dark : light;
+  const pair = mode === 'dark' && isInk(light, 'light') ? dark : light;
   return { fill: pair.fill, label: pair.label };
 }
+
+/** Whether these are Ink's values in this mode: the one test for the Tip's Ink exception. */
+const isInk = (v: { fill: Hex; label: Hex }, mode: 'light' | 'dark') =>
+  v.fill === STUDIO_ACCENTS.ink[mode].fill &&
+  v.label === STUDIO_ACCENTS.ink[mode].label;
 
 /**
  * The OKLCH lightness the Tip's vertical sheen drops at its lower end (addendum §6.1: 0 to 0.06,
@@ -674,6 +678,29 @@ const sheenEnd = (fill: Hex): Hex => {
  */
 const SECOND_LINE_OPACITY = 1;
 
+/**
+ * Ruling S-R2 (owner, 28 Nov: every design passes contrast and visibility): the Tip keeps 3:1
+ * against the page at its weakest point (WCAG 1.4.11), which the sheen's darker end can't on its
+ * own. So the button carries a 1 px edge (`deepEdge`): the fill itself wherever the fill reaches
+ * 3:1 on `bg` (an edge in the button's own colour, so the look is unchanged), else the fill's hue
+ * and chroma at the nearest lightness that does, away from the page (lighter in dark, darker in
+ * light). Contrast with the page only grows that way, so a bisection finds it.
+ */
+export function studioTipEdge(fill: Hex, bg: Hex, mode: 'light' | 'dark'): Hex {
+  const ok = (h: Hex) => contrastRatio(h, bg) >= 3;
+  if (ok(fill)) return fill;
+  const { l, c, h } = hexToOklch(fill);
+  const at = (x: number) => oklchToHex({ l: x, c, h });
+  let near = l; // fails
+  let far = mode === 'dark' ? 1 : 0; // white or black: passes on every Studio page
+  for (let i = 0; i < 20; i += 1) {
+    const mid = (near + far) / 2;
+    if (ok(at(mid))) far = mid;
+    else near = mid;
+  }
+  return at(far);
+}
+
 export interface StudioContrastPair {
   name: string;
   fg: Hex;
@@ -684,11 +711,17 @@ export interface StudioContrastPair {
 /**
  * Every pair a style draws with these accent values in this mode (§4.2): text 4.5, non-text UI 3.
  * The design check and the exhaustive test both run these.
+ *
+ * `tip` is Creator's Tip pair in this mode (`studioDeep`), for a caller that knows both modes'
+ * values (the exhaustive test). Without it, the light pass proves the light pair and the dark pass
+ * proves it only for Ink's values, so a one-mode caller (the photo-accent search) never proves a
+ * pair the page doesn't draw (addendum §6.1).
  */
 export function studioContrastPairs(
   style: StudioStyleId,
   accent: StudioAccentValues,
   mode: 'light' | 'dark',
+  tip?: { fill: Hex; label: Hex },
 ): StudioContrastPair[] {
   const n = STUDIO_STYLES[style].neutrals[mode];
   const { fill: acc, label: accLabel, text: accText } = accent;
@@ -795,22 +828,31 @@ export function studioContrastPairs(
       add('chip label (fg) on card', n.fg, n.card, 4.5);
       add('selected ring (accText) on card', accText, n.card, 3);
       add('icon badge (fg) on el2', n.fg, n.el2, 4.5);
-      // The Tip draws the light pair (studioDeep). With one mode's values only, the light pass
-      // proves it; the dark pass only when these are Ink's dark values (the exception), so it
-      // never proves a pair the page doesn't draw (addendum §6.1).
-      const ink = STUDIO_ACCENTS.ink.dark;
-      if (
-        mode === 'light' ||
-        (accent.fill === ink.fill && accent.label === ink.label)
-      ) {
-        const second = blend(accLabel, SECOND_LINE_OPACITY, acc);
+      // A row's sub (fg2) on its el2 hover (§7.1).
+      add('fg2 on el2', n.fg2, n.el2, 4.5);
+      // The Tip's pair: the caller's (both modes known), else this mode's values where they are
+      // the pair drawn (the light pass, or Ink's in dark: studioDeep).
+      const deep =
+        tip ??
+        (mode === 'light' || isInk(accent, 'dark')
+          ? { fill: acc, label: accLabel }
+          : null);
+      if (deep) {
+        const second = blend(deep.label, SECOND_LINE_OPACITY, deep.fill);
         for (const [end, bg] of [
-          ['', acc],
-          [' (sheen end)', sheenEnd(acc)],
+          ['', deep.fill],
+          [' (sheen end)', sheenEnd(deep.fill)],
         ] as const) {
-          add(`deepLabel on deep${end}`, accLabel, bg, 4.5);
+          add(`deepLabel on deep${end}`, deep.label, bg, 4.5);
           add(`second line on deep${end}`, second, bg, 4.5);
         }
+        // Ruling S-R2: the button's edge against the page, its weakest point (non-text, 3:1).
+        add(
+          'Tip edge (deepEdge) on bg',
+          studioTipEdge(deep.fill, n.bg, mode),
+          n.bg,
+          3,
+        );
       }
       break;
     }
@@ -824,6 +866,8 @@ export function studioContrastPairs(
       add('unselected chip border on row', n.control as Hex, row, 3);
       add('selected border (accText) on row', accText, row, 3);
       add('icon badge (fg) on el2', n.fg, n.el2, 4.5);
+      // A row's sub (fg2) on its el2 hover (§7.2).
+      add('fg2 on el2', n.fg2, n.el2, 4.5);
       break;
     }
   }
@@ -837,7 +881,8 @@ export type StudioTokenMap = Record<string, string>;
  * Both modes' tokens for a page: the style's neutrals (extras included), the accent's three
  * values as `acc`, `accLabel` and `accText`, `bar` (bg at 85%), and the derived tokens a style
  * names in §9 (`chipOn` for Journal and Linen, Stage's `glow`, Tiles' `tileFocus`), and Creator's
- * Tip (`deep`, `deepEnd` the sheen's lower end, `deepLabel`; addendum §6.1).
+ * Tip (`deep`, `deepEnd` the sheen's lower end, `deepLabel`, `deepEdge` its 1 px edge; addendum
+ * §6.1, ruling S-R2).
  */
 export function studioTokens(
   style: StudioStyleId,
@@ -866,6 +911,7 @@ export function studioTokens(
       t.deep = deep.fill;
       t.deepEnd = sheenEnd(deep.fill);
       t.deepLabel = deep.label;
+      t.deepEdge = studioTipEdge(deep.fill, n.bg, mode);
     }
     return t;
   };

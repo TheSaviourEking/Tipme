@@ -422,6 +422,11 @@ const failuresOf = (pairs) =>
       (p) => `${p.name}: ${p.fg} on ${p.bg} ${p.ratio.toFixed(2)} < ${p.min}`,
     );
 
+const creatorTip = (accent, mode, photo) => {
+  const t = studioTokens('creator', accent, photo)[mode];
+  return { fill: t.deep, label: t.deepLabel };
+};
+
 test('every style × accent × mode meets its contrast minimums (exhaustive)', () => {
   let combinations = 0;
   const failures = [];
@@ -429,10 +434,14 @@ test('every style × accent × mode meets its contrast minimums (exhaustive)', (
     // The 8 curated accents, plus `null`: the style's default (TipMe purple on Classic).
     for (const accent of [...CURATED, null])
       for (const mode of MODES) {
+        // Creator's Tip draws the light pair in dark too (studioDeep): the exhaustive proof
+        // passes the pair the page draws, so its edge is proven against each mode's page.
+        const tip = style === 'creator' ? creatorTip(accent, mode) : undefined;
         const pairs = studioContrastPairs(
           style,
           accentValues(style, accent, mode),
           mode,
+          tip,
         );
         // 10 pairs every style draws, plus at least one signature selected-state pair.
         assert.ok(
@@ -822,4 +831,65 @@ test('new surfaces sit inside the photo-accent envelope', () => {
   }
   assert.equal(surfaces('professional', 'light').length, 3);
   assert.equal(surfaces('professional', 'dark').length, 3);
+});
+
+// Ruling S-R2 (owner, 28 Nov: every design passes contrast and visibility): Creator's Tip keeps
+// 3:1 against the page at its weakest point (WCAG 1.4.11). The sheen darkens its lower end, so the
+// button carries a 1 px edge (`deepEdge`): the fill itself where the fill reaches 3:1 on bg, else
+// the fill's hue moved in lightness to the nearest value that does.
+test('Creator’s Tip keeps 3:1 against the page at its weakest edge, every accent and mode', () => {
+  let lowest = Infinity;
+  for (const accent of [...CURATED, null])
+    for (const mode of MODES) {
+      const t = studioTokens('creator', accent)[mode];
+      assert.match(t.deepEdge, /^#[0-9a-f]{6}$/, `${accent} ${mode}`);
+      const edge = contrastRatio(t.deepEdge, t.bg);
+      assert.ok(edge >= 3, `${accent} ${mode}: edge ${edge.toFixed(2)}`);
+      lowest = Math.min(lowest, edge);
+      // The look is kept: where the fill already reaches 3:1 the edge is the fill.
+      if (contrastRatio(t.deep, t.bg) >= 3)
+        assert.equal(t.deepEdge, t.deep, `${accent} ${mode}`);
+      const pair = studioContrastPairs(
+        'creator',
+        accentValues('creator', accent, mode),
+        mode,
+        creatorTip(accent, mode),
+      ).find((p) => p.name === 'Tip edge (deepEdge) on bg');
+      assert.deepEqual(pair, {
+        name: 'Tip edge (deepEdge) on bg',
+        fg: t.deepEdge,
+        bg: t.bg,
+        min: 3,
+      });
+    }
+  assert.ok(lowest >= 3);
+});
+
+test('Creator’s Tip edge holds 3:1 for every light fill the photo accent can make, in both modes', () => {
+  // §6 step 3: light fills are clamped to OKLCH L .45–.55, chroma at most .16; labels are white.
+  const dark = STUDIO_ACCENTS.blue.dark;
+  for (const l of [0.45, 0.5, 0.55])
+    for (const c of [0.04, 0.1, 0.16])
+      for (let h = 0; h < 360; h += 10) {
+        const fill = oklchToHex({ l, c, h });
+        const tip = { fill, label: '#ffffff' };
+        for (const [mode, values] of [
+          ['light', { fill, label: '#ffffff', text: fill }],
+          ['dark', dark],
+        ]) {
+          const pair = studioContrastPairs('creator', values, mode, tip).find(
+            (p) => p.name === 'Tip edge (deepEdge) on bg',
+          );
+          assert.ok(pair, `${fill} ${mode}`);
+          assert.ok(
+            contrastRatio(pair.fg, pair.bg) >= 3,
+            `${fill} ${mode}: ${contrastRatio(pair.fg, pair.bg).toFixed(2)}`,
+          );
+        }
+      }
+});
+
+test('Creator and Professional prove fg2 on el2 (row hover, recessed surfaces)', () => {
+  everyAccentAndMode('creator', ['fg2 on el2']);
+  everyAccentAndMode('professional', ['fg2 on el2']);
 });
