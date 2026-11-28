@@ -3115,3 +3115,51 @@ test("Professional's card rules never reach a block's card", () => {
   assert.ok(html.includes(`${cover}<div class="studio-card">`));
   assert.match(html, /class="studio-card studio-text"/);
 });
+
+// Fix round 1 (review I1): a hovered Tip lightens its fill only. A `filter` on the button would
+// lighten its proven 1 px edge too (Amber light fell to 2.82 on Professional's card, 2.69 on
+// Creator's page). The hover fills are tokens from the registry; auto-dark gets the dark ones with
+// the rest of the tokens.
+const hoverRule = (css, style) => {
+  const flat = css.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\s+/g, ' ');
+  return [
+    ...flat.matchAll(
+      new RegExp(
+        `\\.studio\\[data-style='${style}'\\][^{}]*\\.composer-submit:hover \\{([^}]*)\\}`,
+        'g',
+      ),
+    ),
+  ];
+};
+test("Creator's and Professional's hovered Tips change their fill only, never the edge", () => {
+  for (const [style, fill] of [
+    ['professional', /background: var\(--studio-tipHover\);/],
+    [
+      'creator',
+      /background: linear-gradient\( ?180deg, var\(--studio-deepHover\), var\(--studio-deepEndHover\) ?\);/,
+    ],
+  ]) {
+    const css = sheet(style);
+    assert.doesNotMatch(css, /brightness\(/, style);
+    const rules = hoverRule(css, style);
+    assert.equal(rules.length, 1, `${style}: one hover rule, for every mode`);
+    const body = rules[0][1];
+    assert.match(body, fill, style);
+    assert.doesNotMatch(body, /border|filter: (?!none)/, style);
+  }
+  // The tokens are on the root, in both modes, and in auto's dark block.
+  const amber = studioTokens('professional', 'amber');
+  assert.match(
+    rootTag(professional({ accent: 'amber' })),
+    new RegExp(`--studio-tipHover:${amber.light.tipHover}`),
+  );
+  const auto = professional({ accent: 'amber', mode: 'auto' });
+  assert.match(
+    auto,
+    new RegExp(`--studio-tipHover:${amber.dark.tipHover} !important`),
+  );
+  const t = studioTokens('creator', null).dark;
+  const root = rootTag(creator());
+  assert.match(root, new RegExp(`--studio-deepHover:${t.deepHover}`));
+  assert.match(root, new RegExp(`--studio-deepEndHover:${t.deepEndHover}`));
+});

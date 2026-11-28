@@ -709,6 +709,45 @@ export function studioTipEdge(
 }
 
 /**
+ * CSS `brightness(k)` on a colour: each sRGB channel scaled by `k`, clamped. The Tips' hover
+ * (addendum §7.1: 1.06; §7.2: 1.08 light, 0.94 dark) is drawn as these computed fills, never as a
+ * filter on the button, which would lighten its proven 1 px edge too (Task 4 fix round 1).
+ */
+export function studioBrightness(hex: Hex, k: number): Hex {
+  return `#${[1, 3, 5]
+    .map((i) =>
+      Math.min(255, Math.round(parseInt(hex.slice(i, i + 2), 16) * k))
+        .toString(16)
+        .padStart(2, '0'),
+    )
+    .join('')}` as Hex;
+}
+
+/**
+ * A Tip's hover fill: `brightness(k)` of its fill wherever the label keeps 4.5:1 on it, else the
+ * brightness nearest `k` that does (between 1, the proven fill, and `k`). So the hover pair passes
+ * by construction and never narrows a photo accent's choice.
+ */
+export function studioTipHover(fill: Hex, label: Hex, k: number): Hex {
+  const at = (x: number) => studioBrightness(fill, x);
+  if (contrastRatio(label, at(k)) >= 4.5) return at(k);
+  let near = 1; // passes: the fill's own pair is proven
+  let far = k;
+  for (let i = 0; i < 20; i += 1) {
+    const mid = (near + far) / 2;
+    if (contrastRatio(label, at(mid)) >= 4.5) near = mid;
+    else far = mid;
+  }
+  return at(near);
+}
+
+/** Each Tip's hover brightness (addendum §7.1, §7.2). */
+export const STUDIO_TIP_HOVER = {
+  creator: 1.06,
+  professional: { light: 1.08, dark: 0.94 },
+} as const;
+
+/**
  * The target a pill-shaped Tip's 1 px edge is computed to (rulings S-R2, S-R4): 3:1 plus a margin
  * for antialiasing on the pill's curved ends, where the boards measured 2.91 drawn on an edge
  * computed at 3.01. Professional's "Send a tip" pill and its sticky pill (addendum §6.5).
@@ -874,6 +913,24 @@ export function studioContrastPairs(
           add(`deepLabel on deep${end}`, deep.label, bg, 4.5);
           add(`second line on deep${end}`, second, bg, 4.5);
         }
+        // Hovered, both sheen ends lighten (the edge keeps its colour).
+        for (const [end, bg] of [
+          ['', deep.fill],
+          [' (sheen end)', sheenEnd(deep.fill)],
+        ] as const) {
+          const hover = studioTipHover(
+            bg,
+            deep.label,
+            STUDIO_TIP_HOVER.creator,
+          );
+          add(`deepLabel on deep${end} (hover)`, deep.label, hover, 4.5);
+          add(
+            `second line on deep${end} (hover)`,
+            blend(deep.label, SECOND_LINE_OPACITY, hover),
+            hover,
+            4.5,
+          );
+        }
         // Ruling S-R2: the button's edge against the page, its weakest point (non-text, 3:1).
         add(
           'Tip edge (deepEdge) on bg',
@@ -914,6 +971,13 @@ export function studioContrastPairs(
         n.card,
         STUDIO_PILL_EDGE_MIN,
       );
+      // Hovered, the fill lightens (dark: darkens) and the edge keeps its colour.
+      add(
+        'accLabel on tipHover (Tip hover)',
+        accLabel,
+        studioTipHover(acc, accLabel, STUDIO_TIP_HOVER.professional[mode]),
+        4.5,
+      );
       add(
         'sticky Tip pill edge (tipBarEdge) on bg',
         studioTipEdge(acc, n.bg, mode, STUDIO_PILL_EDGE_MIN),
@@ -934,8 +998,9 @@ export type StudioTokenMap = Record<string, string>;
  * values as `acc`, `accLabel` and `accText`, `bar` (bg at 85%), and the derived tokens a style
  * names in §9 (`chipOn` for Journal and Linen, Stage's `glow`, Tiles' `tileFocus`), and Creator's
  * Tip (`deep`, `deepEnd` the sheen's lower end, `deepLabel`, `deepEdge` its 1 px edge, and
- * `deepBarEdge` the sticky bar pill's edge; addendum §6.1, ruling S-R2), and Professional's pill
- * edges (`tipEdge` on the card, `tipBarEdge` on the sticky bar's bg; rulings S-R2, S-R4).
+ * `deepBarEdge` the sticky bar pill's edge; addendum §6.1, ruling S-R2; `deepHover` and
+ * `deepEndHover` its hovered sheen), and Professional's pill edges (`tipEdge` on the card,
+ * `tipBarEdge` on the sticky bar's bg; rulings S-R2, S-R4) and hovered fill (`tipHover`).
  */
 export function studioTokens(
   style: StudioStyleId,
@@ -966,10 +1031,29 @@ export function studioTokens(
       t.deepLabel = deep.label;
       t.deepEdge = studioTipEdge(deep.fill, n.bg, mode);
       t.deepBarEdge = studioTipEdge(deep.fill, barEnds(n.bg), mode);
+      // The hover's fills (addendum §7.1: brightness 1.06), drawn in place of a filter so the edge
+      // keeps its colour.
+      t.deepHover = studioTipHover(
+        deep.fill,
+        deep.label,
+        STUDIO_TIP_HOVER.creator,
+      );
+      t.deepEndHover = studioTipHover(
+        sheenEnd(deep.fill),
+        deep.label,
+        STUDIO_TIP_HOVER.creator,
+      );
     }
     if (style === 'professional') {
       t.tipEdge = studioTipEdge(a.fill, n.card, mode, STUDIO_PILL_EDGE_MIN);
       t.tipBarEdge = studioTipEdge(a.fill, n.bg, mode, STUDIO_PILL_EDGE_MIN);
+      // The hover's fill (§7.2: brightness 1.08, dark 0.94), drawn in place of a filter so the edge
+      // keeps its colour.
+      t.tipHover = studioTipHover(
+        a.fill,
+        a.label,
+        STUDIO_TIP_HOVER.professional[mode],
+      );
     }
     return t;
   };

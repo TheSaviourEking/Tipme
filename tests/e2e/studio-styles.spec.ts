@@ -2606,38 +2606,6 @@ test("Professional's DOM order holds at 390 and 1440, and the sticky bar watches
     expect(Math.round(avatar.height)).toBe(width === 390 ? 96 : 120);
     const blocks = await boxOf(page, '.studio-grid');
     expect(blocks.top).toBeGreaterThanOrEqual(card.bottom);
-    // The blocks stack down their column, each as wide as it, none over another (a text or quote
-    // block is a `studio-card` too, and must never take the rising card's rules).
-    const stacked = await page
-      .locator('.studio-grid .studio-block')
-      .evaluateAll((els) =>
-        els.map((el) => {
-          const r = el.getBoundingClientRect();
-          const inner = el.firstElementChild!.getBoundingClientRect();
-          return {
-            top: r.top,
-            bottom: r.bottom,
-            w: r.width,
-            innerW: inner.width,
-            innerTop: inner.top - r.top,
-          };
-        }),
-      );
-    expect(stacked.length).toBeGreaterThan(3);
-    for (const [i, b] of stacked.entries()) {
-      expect(Math.round(b.w), `block ${i} at ${width}`).toBe(
-        Math.round(blocks.width - (width === 390 ? 40 : 0)),
-      );
-      expect(
-        Math.abs(b.innerW - b.w),
-        `block ${i} at ${width}`,
-      ).toBeLessThanOrEqual(0.5);
-      expect(b.innerTop, `block ${i} at ${width}`).toBeGreaterThanOrEqual(-0.5);
-      if (i > 0)
-        expect(b.top, `block ${i} at ${width}`).toBeGreaterThanOrEqual(
-          stacked[i - 1]!.bottom - 0.5,
-        );
-    }
     const tops = [];
     for (const selector of PROFESSIONAL_ORDER)
       tops.push((await boxOf(page, selector)).top);
@@ -3005,4 +2973,166 @@ test("Professional's names are the words it shows, and axe finds nothing in ligh
       await expect(page.locator('.studio')).not.toContainText(/verified/i);
       await expectAccessible(page);
     }
+});
+
+// The layout probe can't see one box over another (Task 4: text blocks once took the rising card's
+// rules and overlapped the photos). Professional's blocks stack down one column, each as wide as
+// its content box, none over another, at 320, 390, 768 (the 720 card) and 1440.
+test("Professional's blocks stack down one column at 320, 390, 768 and 1440", async ({
+  page,
+}) => {
+  for (const width of [320, 390, 768, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto(PROFESSIONAL);
+    await ready(page);
+    const card = await boxOf(page, '.studio-page > .studio-card');
+    const grid = await page.locator('.studio-grid').evaluate((el) => {
+      const r = el.getBoundingClientRect();
+      const cs = getComputedStyle(el);
+      return {
+        top: r.top + scrollY,
+        width:
+          r.width - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight),
+      };
+    });
+    expect(grid.top, `${width}`).toBeGreaterThanOrEqual(card.bottom);
+    const stacked = await page
+      .locator('.studio-grid .studio-block')
+      .evaluateAll((els) =>
+        els.map((el) => {
+          const r = el.getBoundingClientRect();
+          const inner = el.firstElementChild!.getBoundingClientRect();
+          return {
+            top: r.top,
+            bottom: r.bottom,
+            w: r.width,
+            innerW: inner.width,
+            innerTop: inner.top - r.top,
+          };
+        }),
+      );
+    expect(stacked.length).toBeGreaterThan(3);
+    for (const [i, b] of stacked.entries()) {
+      const at = `block ${i} at ${width}`;
+      expect(Math.abs(b.w - grid.width), at).toBeLessThanOrEqual(0.5);
+      expect(Math.abs(b.innerW - b.w), at).toBeLessThanOrEqual(0.5);
+      expect(b.innerTop, at).toBeGreaterThanOrEqual(-0.5);
+      if (i > 0)
+        expect(b.top, at).toBeGreaterThanOrEqual(stacked[i - 1]!.bottom - 0.5);
+    }
+  }
+});
+
+// Fix round 1 (review I1): hovered, a Tip lightens its fill alone; its 1 px edge keeps the colour
+// proven against what it sits on (Professional's pill on the card at 3.25, Creator's Tip on the
+// page at 3), in light, dark and auto under a dark colour scheme.
+test('a hovered Tip keeps its edge: Professional and Creator, light, dark and auto-dark', async ({
+  page,
+}) => {
+  const { contracts } = await studioModules();
+  const rgb = (hex: string) =>
+    `rgb(${[1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)).join(', ')})`;
+  await page.setViewportSize({ width: 390, height: 844 });
+  for (const [style, mode, accent, scheme] of [
+    ['professional', 'light', 'amber', 'light'],
+    ['professional', 'dark', null, 'dark'],
+    ['professional', 'auto', null, 'dark'],
+    ['professional', 'auto', 'amber', 'light'],
+    ['creator', 'light', 'amber', 'light'],
+    ['creator', 'dark', null, 'dark'],
+  ] as const) {
+    await page.emulateMedia({ colorScheme: scheme });
+    await page.goto(
+      `/dev/studio-lab?style=${style}&mode=${mode}${accent ? `&accent=${accent}` : ''}`,
+    );
+    await ready(page);
+    const drawn = mode === 'auto' ? scheme : mode;
+    const t = contracts.studioTokens(style, accent)[drawn];
+    const tip = page.locator('.studio-tip .composer-action .composer-submit');
+    const read = () =>
+      tip.evaluate((el) => {
+        const cs = getComputedStyle(el);
+        return {
+          edge: cs.borderTopColor,
+          fill: cs.backgroundColor,
+          image: cs.backgroundImage,
+          filter: cs.filter,
+        };
+      });
+    const before = await read();
+    await tip.hover();
+    await expect
+      .poll(async () => {
+        const r = await read();
+        return style === 'professional' ? r.fill : r.image;
+      })
+      .not.toBe(style === 'professional' ? before.fill : before.image);
+    const hovered = await read();
+    const label = `${style} ${mode} ${accent} ${scheme}`;
+    expect(hovered.edge, label).toBe(before.edge);
+    expect(hovered.filter, label).toBe('none');
+    if (style === 'professional') {
+      expect(hovered.edge, label).toBe(rgb(t.tipEdge!));
+      expect(hovered.fill, label).toBe(rgb(t.tipHover!));
+      expect(
+        contracts.contrastRatio(
+          t.tipEdge as `#${string}`,
+          t.card as `#${string}`,
+        ),
+        label,
+      ).toBeGreaterThanOrEqual(3.25);
+    } else {
+      expect(hovered.edge, label).toBe(rgb(t.deepEdge!));
+      expect(hovered.image, label).toContain(rgb(t.deepHover!));
+      expect(
+        contracts.contrastRatio(
+          t.deepEdge as `#${string}`,
+          t.bg as `#${string}`,
+        ),
+        label,
+      ).toBeGreaterThanOrEqual(3);
+    }
+    await page.mouse.move(1, 1);
+  }
+  await page.emulateMedia({ colorScheme: 'light' });
+});
+
+// Forced colours drop the selected chip's accText border colour: Professional marks it with a
+// Highlight outline as the board draws it.
+test("under forced colours Professional's selected chip carries a Highlight outline", async ({
+  page,
+}) => {
+  await page.emulateMedia({ forcedColors: 'active' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(PROFESSIONAL);
+  await ready(page);
+  const marks = await page.evaluate(() => {
+    const probe = document.createElement('span');
+    probe.style.color = 'Highlight';
+    document.body.append(probe);
+    const highlight = getComputedStyle(probe).color;
+    probe.remove();
+    const spans = [
+      ...document.querySelectorAll('.studio-tip .tm-amount-choice'),
+    ].map((label) => {
+      const span = label.querySelector(':scope > span')!;
+      const cs = getComputedStyle(span);
+      return {
+        checked: label.querySelector('input')!.checked,
+        style: cs.outlineStyle,
+        width: parseFloat(cs.outlineWidth),
+        colour: cs.outlineColor,
+      };
+    });
+    return { highlight, spans };
+  });
+  const checked = marks.spans.filter((m) => m.checked);
+  expect(checked.length).toBe(1);
+  expect(checked[0]).toMatchObject({
+    style: 'solid',
+    width: 3,
+    colour: marks.highlight,
+  });
+  for (const m of marks.spans.filter((x) => !x.checked))
+    expect(m.style).toBe('none');
 });

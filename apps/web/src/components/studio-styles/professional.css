@@ -459,18 +459,14 @@
   transition: transform 180ms var(--ease);
 }
 
+/* Hover (§7.2: brightness 1.08, dark 0.94) lightens the fill alone: tipHover, a token per mode (so
+   auto-dark gets the dark one), never a filter, which would lighten the proven edge too. */
 @media (hover: hover) and (pointer: fine) {
   .studio[data-style='professional'] .studio-tip .composer-submit:hover {
-    background: var(--studio-acc);
+    background: var(--studio-tipHover);
     box-shadow: none;
-    filter: brightness(1.08);
+    filter: none;
     transform: none;
-  }
-
-  .studio[data-style='professional'][data-mode='dark']
-    .studio-tip
-    .composer-submit:hover {
-    filter: brightness(0.94);
   }
 }
 

@@ -377,14 +377,15 @@
 }
 
 @media (hover: hover) and (pointer: fine) {
+  /* Hover (§7.1: brightness 1.06) lightens the sheen alone, never the edge: no filter. */
   .studio[data-style='creator'] .studio-tip .composer-submit:hover {
     background: linear-gradient(
       180deg,
-      var(--studio-deep),
-      var(--studio-deepEnd)
+      var(--studio-deepHover),
+      var(--studio-deepEndHover)
     );
     box-shadow: none;
-    filter: brightness(1.06);
+    filter: none;
     transform: none;
   }
 }

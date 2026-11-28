@@ -16,6 +16,8 @@ import {
   contrastRatio,
   hexToOklch,
   oklchToHex,
+  studioBrightness,
+  studioTipHover,
   studioContrastPairs,
   studioTipEdge,
   studioTokens,
@@ -1063,4 +1065,95 @@ test("Professional's pill edges hold 3.25:1 for every fill the photo accent can 
             );
           }
         }
+});
+
+// Fix round 1 (review I1): a `filter: brightness()` hover lightens the Tip's 1 px edge with its fill
+// (Amber light: Professional's pill edge 2.82, Creator's 2.69). The hover lightens the fill alone,
+// through tokens computed here, and the edge keeps its proven colour; the hovered fill keeps the
+// label at 4.5.
+test('studioBrightness is CSS brightness() on a hex: each channel scaled, clamped', () => {
+  assert.equal(studioBrightness('#808080', 1.08), '#8a8a8a');
+  assert.equal(studioBrightness('#f2f2f4', 0.94), '#e3e3e5');
+  assert.equal(studioBrightness('#fafafa', 1.08), '#ffffff');
+});
+
+test('a Tip hover stops short of the brightness that would cost its label 4.5', () => {
+  // A light photo fill (L .55 green) the plain 1.08 takes from 4.63 to 4.08 with its white label.
+  const fill = '#48823b';
+  const label = '#ffffff';
+  assert.ok(contrastRatio(label, studioBrightness(fill, 1.08)) < 4.5);
+  const hover = studioTipHover(fill, label, 1.08);
+  assert.ok(contrastRatio(label, hover) >= 4.5);
+  assert.ok(
+    contrastRatio(label, hover) < 4.6,
+    'no further from the spec than needed',
+  );
+  // Where the plain brightness passes, it is the hover.
+  assert.equal(
+    studioTipHover('#0a5bd3', '#ffffff', 1.08),
+    studioBrightness('#0a5bd3', 1.08),
+  );
+});
+
+test("Professional's hovered pill: the fill lightens (1.08 light, 0.94 dark), the edge does not, the label keeps 4.5", () => {
+  for (const accent of [...CURATED, null])
+    for (const mode of MODES) {
+      const t = studioTokens('professional', accent)[mode];
+      const k = mode === 'light' ? 1.08 : 0.94;
+      assert.equal(t.tipHover, studioTipHover(t.acc, t.accLabel, k));
+      assert.ok(contrastRatio(t.accLabel, t.tipHover) >= 4.5);
+      // The spec's brightness wherever the label keeps 4.5 on it.
+      if (contrastRatio(t.accLabel, studioBrightness(t.acc, k)) >= 4.5)
+        assert.equal(
+          t.tipHover,
+          studioBrightness(t.acc, k),
+          `${accent} ${mode}`,
+        );
+      const pairs = studioContrastPairs(
+        'professional',
+        accentValues('professional', accent, mode),
+        mode,
+      );
+      assert.deepEqual(
+        pairs.find((p) => p.name === 'accLabel on tipHover (Tip hover)'),
+        {
+          name: 'accLabel on tipHover (Tip hover)',
+          fg: t.accLabel,
+          bg: t.tipHover,
+          min: 4.5,
+        },
+      );
+      // The hovered pill draws the same edge: proven at 3.25 on the card.
+      assert.ok(contrastRatio(t.tipEdge, t.card) >= 3.25);
+      assert.equal(t.tipHoverEdge, undefined);
+    }
+});
+
+test("Creator's hovered Tip: both sheen ends lighten 1.06, the edge does not, both lines keep 4.5", () => {
+  for (const accent of [...CURATED, null])
+    for (const mode of MODES) {
+      const t = studioTokens('creator', accent)[mode];
+      assert.equal(t.deepHover, studioTipHover(t.deep, t.deepLabel, 1.06));
+      assert.equal(
+        t.deepEndHover,
+        studioTipHover(t.deepEnd, t.deepLabel, 1.06),
+      );
+      for (const fill of [t.deepHover, t.deepEndHover])
+        assert.ok(contrastRatio(t.deepLabel, fill) >= 4.5, `${accent} ${mode}`);
+      const names = studioContrastPairs(
+        'creator',
+        accentValues('creator', accent, mode),
+        mode,
+        creatorTip(accent, mode),
+      )
+        .filter((p) => p.name.endsWith('(hover)'))
+        .map((p) => [p.name, p.bg]);
+      assert.deepEqual(names, [
+        ['deepLabel on deep (hover)', t.deepHover],
+        ['second line on deep (hover)', t.deepHover],
+        ['deepLabel on deep (sheen end) (hover)', t.deepEndHover],
+        ['second line on deep (sheen end) (hover)', t.deepEndHover],
+      ]);
+      assert.ok(contrastRatio(t.deepEdge, t.bg) >= 3);
+    }
 });
