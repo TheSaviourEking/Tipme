@@ -16,19 +16,20 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const specs = (n) =>
   Array.from({ length: n }, (_, i) => `tests/e2e/s${i}.spec.ts`);
 
-test('the fewest shards: none for no spec, one up to 8, one more per 8, at most the e2e six', () => {
+test('the fewest shards: none for no spec, one up to 4, one more per 4, at most the e2e six', () => {
   assert.equal(MAX_SHARDS, 6);
   const expected = {
     0: 0,
     1: 1,
-    8: 1,
-    9: 2,
-    16: 2,
-    17: 3,
-    40: 5,
-    41: 6,
-    48: 6,
-    49: 6,
+    4: 1,
+    5: 2,
+    7: 2,
+    8: 2,
+    9: 3,
+    20: 5,
+    21: 6,
+    24: 6,
+    25: 6,
     200: 6,
   };
   for (const [n, count] of Object.entries(expected))
@@ -57,7 +58,7 @@ test('the CLI plans the matrix and lists one shard’s files, one per line', () 
   const SPECS = `${specs(9).join(' ')} `;
   const env = { ...process.env, SPECS, GITHUB_OUTPUT: out };
   execFileSync('node', [join(root, 'scripts/ci-burn-in.mjs'), 'plan'], { env });
-  assert.equal(readFileSync(out, 'utf8'), 'count=2\nshards=[1,2]\n');
+  assert.equal(readFileSync(out, 'utf8'), 'count=3\nshards=[1,2,3]\n');
 
   const listed = execFileSync(
     'node',
@@ -150,7 +151,7 @@ test('a release PR into main plans 0 shards with a clear summary; a PR into dev 
   assert.ok(main.summary.includes(RELEASE_SKIP_NOTE));
   for (const base of ['dev', 'feat/x', '']) {
     const other = run(base);
-    assert.equal(other.out, 'count=2\nshards=[1,2]\n', `base ${base}`);
+    assert.equal(other.out, 'count=3\nshards=[1,2,3]\n', `base ${base}`);
     assert.ok(!other.summary.includes(RELEASE_SKIP_NOTE));
   }
 });

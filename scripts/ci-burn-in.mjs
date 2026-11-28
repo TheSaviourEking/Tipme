@@ -15,14 +15,18 @@ import { pathToFileURL } from 'node:url';
 
 /** As many shards as the e2e suite has, so a burn-in never needs more runners than it does. */
 export const MAX_SHARDS = 6;
-/** Files per shard before another is added: 8 files × 5 runs fit well inside one job's limit. */
-export const FILES_PER_SHARD = 8;
+/**
+ * Files per shard before another is added. 8 was too many (28 Nov 2026): PR #353's 7 live-update
+ * specs × 5 runs took 33 min plus the @alone stage and setup, right at the job's 40-minute limit.
+ * 4 files × 5 runs leaves room for long specs.
+ */
+export const FILES_PER_SHARD = 4;
 
 /** The summary line for a release PR into main. */
 export const RELEASE_SKIP_NOTE =
   'Release PR into main: burn-in skipped; specs were burnt in on dev';
 
-/** The fewest shards for `n` changed spec files: 0 for none, then one per 8 files, at most 6. */
+/** The fewest shards for `n` changed spec files: 0 for none, then one per 4 files, at most 6. */
 export function shardCount(n) {
   return Math.min(MAX_SHARDS, Math.ceil(n / FILES_PER_SHARD));
 }
