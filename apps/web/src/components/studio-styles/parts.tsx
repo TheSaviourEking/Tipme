@@ -1,12 +1,15 @@
 import type { ReactNode } from 'react';
+import Link from 'next/link';
 import {
   RENDITION_WIDTHS,
   SOCIAL_PLATFORMS,
+  STUDIO_STYLES,
   STUDIO_IMAGE_ASPECT,
   COVER_SIZE,
   coverRenditionPath,
   embedUrl,
   linkHandle,
+  linkRowWords,
   parseVideoLink,
   studioSlotWidth,
   type PublicProfile,
@@ -18,6 +21,7 @@ import {
 } from '@tipme/contracts';
 import { ProBadge } from '@tipme/ui';
 import { AvatarImage } from '@/components/avatar';
+import { Wordmark } from '@/components/brand';
 import { LinkBadge } from '@/components/profile/link-badge';
 import { Money } from '@/components/money';
 import { API_ORIGIN } from '@/lib/avatar-source';
@@ -53,16 +57,21 @@ export type CoverSize = { width: number; height: number };
 const NAV_HEIGHT = 76;
 
 /**
- * The styles that set the identity over a full-bleed cover photo (§9.4, §9.9), and how tall that
- * photo is drawn on a phone and from 1024 px: stage.css, horizon.css `--tall` plus the header strip
- * it runs up under (frame.css; a unit test holds them equal). They need a photo (`needsPhoto`): any
- * other cover draws their gradient treatment.
+ * The styles drawn over or under a full-bleed cover photo (Stage and Horizon set the identity over
+ * it, §9.4, §9.9; Creator's avatar sits on its faded foot, addendum §7.1), and how tall that photo
+ * is drawn on a phone and from 1024 px: stage.css, horizon.css, creator.css `--tall` plus the
+ * header strip it runs up under (frame.css; a unit test holds them equal). They need a photo
+ * (`needsPhoto`): any other cover draws their gradient treatment.
  */
 export const STYLE_COVER: Partial<
   Record<StudioStyleId, { tall: number; desktopTall: number }>
 > = {
   stage: { tall: 488 + NAV_HEIGHT, desktopTall: 640 + NAV_HEIGHT },
   horizon: { tall: 640 + NAV_HEIGHT, desktopTall: 836 + NAV_HEIGHT },
+  // Stage's box (addendum §9.3), so the #283 tall-crop read serves it too.
+  creator: { tall: 488 + NAV_HEIGHT, desktopTall: 640 + NAV_HEIGHT },
+  // Professional (addendum §7.2): Stage's phone box, 440 from 1024 px, the card rising over its foot.
+  professional: { tall: 488 + NAV_HEIGHT, desktopTall: 440 + NAV_HEIGHT },
 };
 
 /**
@@ -154,8 +163,9 @@ function CoverPhoto({
 
 /**
  * The cover slot. "Your cover" is the one set in Settings: a photo in the style's photo treatment,
- * anything else as today's cover art. Gradient and plain are drawn by the style's CSS from its
- * tokens.
+ * anything else as today's cover art, or, in a style that needs a photo (Creator, whose 488 px box
+ * would stretch art made for a wide band), its gradient treatment (addendum §7.1). Gradient and
+ * plain are drawn by the style's CSS from its tokens.
  */
 export function StyleCover({
   doc,
@@ -173,6 +183,10 @@ export function StyleCover({
       <div className="studio-cover" data-cover={doc.cover} aria-hidden="true" />
     );
   const photo = coverPhoto(cover, doc.style, coverSize);
+  if (!photo && STUDIO_STYLES[doc.style].needsPhoto)
+    return (
+      <div className="studio-cover" data-cover="gradient" aria-hidden="true" />
+    );
   if (!photo)
     return (
       <div className="studio-cover" data-cover="art">
@@ -298,6 +312,15 @@ export function StyleIdentity({
   // Journal shows this avatar on a desktop only (its phone avatar sits in the top row), so it is
   // not fetched eagerly there; it is never Journal's largest paint (the name is).
   const journal = style === 'journal';
+  // Creator's avatar is 112 on a phone, 144 on a desktop (addendum §7.1); Professional's 96 and 120
+  // (§7.2).
+  const sizes = journal
+    ? '72px'
+    : style === 'creator'
+      ? '(max-width: 1023px) 112px, 144px'
+      : style === 'professional'
+        ? '(max-width: 1023px) 96px, 120px'
+        : '(max-width: 1023px) 104px, 128px';
   return (
     <header className="studio-identity" aria-labelledby="studio-name">
       <AvatarImage
@@ -306,7 +329,7 @@ export function StyleIdentity({
         name={profile.displayName}
         width={256}
         height={256}
-        sizes={journal ? '72px' : '(max-width: 1023px) 104px, 128px'}
+        sizes={sizes}
         priority={!journal}
       />
       {!banded && <StyleName styleId={style} name={profile.displayName} />}
@@ -535,6 +558,98 @@ export function StyleLinks({ links }: { links: readonly SocialLink[] }) {
         })}
       </ul>
     </section>
+  );
+}
+
+/** "{Site}: {handle}, opens in a new tab", or "{Site}, opens in a new tab" (addendum §7.4). */
+const iconName = (link: SocialLink) => {
+  const handle = linkHandle(link);
+  const site = SOCIAL_PLATFORMS[link.platform].label;
+  return `${handle ? `${site}: ${handle}` : site}, opens in a new tab`;
+};
+
+/**
+ * Creator's and Professional's icon row (addendum §5.4, §7.4): the follow sites, each a 44 px
+ * circle holding the site's badge, in the saved order. Nothing at all without any.
+ */
+export function StyleIconRow({ links }: { links: readonly SocialLink[] }) {
+  if (!links.length) return null;
+  return (
+    <ul className="studio-icons">
+      {links.map((link) => (
+        <li key={link.url}>
+          <a className="studio-icon" href={link.url} {...external}>
+            <LinkBadge platform={link.platform} small />
+            {/* Named in words, not by the badge's letters (which stay out of the tree). */}
+            <span className="sr-only">{iconName(link)}</span>
+          </a>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/**
+ * Creator's and Professional's link rows (addendum §5.4, §7.1): the featured link first, then the
+ * other row sites, each with its badge, its row words (ruling S-R3), the handle as sub and a
+ * chevron. No visible title; the nav keeps §8's name for screen readers. Nothing without any.
+ */
+export function StyleLinkRows({ links }: { links: readonly SocialLink[] }) {
+  if (!links.length) return null;
+  return (
+    <nav className="studio-rows" aria-label="Find me elsewhere">
+      <ul className="studio-links__list">
+        {links.map((link) => {
+          const handle = linkHandle(link);
+          return (
+            <li key={link.url}>
+              <a className="studio-link" href={link.url} {...external}>
+                <LinkBadge platform={link.platform} small />
+                <span className="studio-link__words">
+                  <span className="studio-link__title">
+                    {linkRowWords(link.platform)}
+                  </span>
+                  {handle && (
+                    <span className="studio-link__sub" data-truncate="">
+                      {handle}
+                    </span>
+                  )}
+                </span>
+                <svg
+                  className="studio-link__chevron"
+                  viewBox="0 0 24 24"
+                  width="16"
+                  height="16"
+                  aria-hidden="true"
+                  focusable="false"
+                >
+                  <path d="M9.5 6.5L15 12l-5.5 5.5" />
+                </svg>
+                <span className="sr-only">{NEW_TAB}</span>
+              </a>
+            </li>
+          );
+        })}
+      </ul>
+    </nav>
+  );
+}
+
+/**
+ * "Powered by tipme" on Creator and Professional (owner, 27 Nov 2026; addendum §6.6): one link home,
+ * named "Powered by TipMe", with no tracking parameter (analytics waits on D-07).
+ */
+export function PoweredBy() {
+  return (
+    // No prefetch: the home page is never fetched just because the line scrolled into view.
+    <Link
+      className="studio-powered"
+      href="/"
+      prefetch={false}
+      aria-label="Powered by TipMe"
+    >
+      Powered by <Wordmark className="studio-powered__mark" label={null} />
+    </Link>
   );
 }
 

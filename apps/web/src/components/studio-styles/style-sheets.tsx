@@ -18,6 +18,8 @@ const SHEETS: Record<StudioStyleId, ReturnType<typeof dynamic>> = {
   signboard: dynamic(() => import('./sheets/signboard')),
   sprint: dynamic(() => import('./sheets/sprint')),
   tiles: dynamic(() => import('./sheets/tiles')),
+  creator: dynamic(() => import('./sheets/creator')),
+  professional: dynamic(() => import('./sheets/professional')),
 };
 
 export function StyleSheet({ styleId }: { styleId: StudioStyleId }) {

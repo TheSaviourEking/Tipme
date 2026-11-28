@@ -414,6 +414,66 @@ test("Stage's and Horizon's photo slots are the widths their CSS draws", () => {
   assert.equal(studioSlotWidth('horizon', 'photo', 1440), 520);
 });
 
+// Addendum ruling P3: Creator's desktop main column is 1040 − 420 − 80; its gallery is a strip of
+// 156 px tiles at every width. Professional's blocks sit in one 640 column on desktop; its gallery
+// is 3-up, gap 8.
+test('Creator and Professional slot widths follow their layouts', () => {
+  assert.equal(studioSlotWidth('creator', 'text', 1440), 540);
+  assert.equal(studioSlotWidth('creator', 'photo', 1440), 540);
+  assert.equal(studioSlotWidth('creator', 'gallery', 390), 156);
+  assert.equal(studioSlotWidth('creator', 'gallery', 1440), 156);
+  assert.equal(studioSlotWidth('professional', 'text', 1440), 640);
+  assert.equal(studioSlotWidth('professional', 'gallery', 1440), 208);
+  assert.equal(studioSlotWidth('professional', 'gallery', 390), 111);
+  assert.equal(studioSlotWidth('professional', 'photo', 390), 350);
+});
+
+test('heading sizes: Creator 20, Professional 18', () => {
+  assert.equal(STUDIO_HEADING_PX.creator, 20);
+  assert.equal(STUDIO_HEADING_PX.professional, 18);
+});
+
+test('cover-photo fires for Creator on Your cover without a photo, never for Professional', () => {
+  for (const coverKind of ['design', 'none'])
+    assert.deepEqual(
+      checkDesign(doc({ style: 'creator' }), { ...CTX, coverKind }).notices,
+      [
+        {
+          rule: 'cover-photo',
+          message:
+            'Creator looks best with a cover photo. Add one in Settings.',
+        },
+      ],
+      coverKind,
+    );
+  assert.ok(
+    !noticeRules(
+      checkDesign(doc({ style: 'creator' }), { ...CTX, coverKind: 'photo' }),
+    ).includes('cover-photo'),
+  );
+  for (const coverKind of ['photo', 'design', 'none'])
+    assert.ok(
+      !noticeRules(
+        checkDesign(doc({ style: 'professional' }), { ...CTX, coverKind }),
+      ).includes('cover-photo'),
+      coverKind,
+    );
+});
+
+test('name-fallback never fires for Creator or Professional', () => {
+  const name = 'Ɗanlami Ƙwairanga Ɓello';
+  for (const style of ['creator', 'professional'])
+    assert.ok(
+      !noticeRules(
+        checkDesign(doc({ style }), {
+          ...CTX,
+          profile: { ...CTX.profile, name },
+        }),
+      ).includes('name-fallback'),
+      style,
+    );
+});
+
 test("photo rules use the style's slot widths", () => {
   const widest = (style) =>
     Math.max(...[390, 1440].map((v) => studioSlotWidth(style, 'photo', v)));

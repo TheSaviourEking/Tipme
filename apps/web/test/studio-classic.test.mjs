@@ -42,6 +42,9 @@ const STUBS = {
   './style-tokens': './style-tokens.mjs',
   './classic-tokens': './classic-tokens.mjs',
   './classic': './classic.mjs',
+  // parts.tsx draws Creator's "Powered by" with the wordmark and Next's link.
+  '@/components/brand': './stub-brand.mjs',
+  'next/link': './stub-link.mjs',
 };
 function build(name, file) {
   assert.ok(existsSync(file), `${file.pathname} exists`);
@@ -59,6 +62,16 @@ function build(name, file) {
   writeFileSync(new URL(name, out), js);
 }
 const stub = (name, code) => writeFileSync(new URL(name, out), code);
+stub(
+  'stub-brand.mjs',
+  `import { createElement } from 'react';
+export const Wordmark = (p) => createElement('span', { className: 'wordmark', 'aria-hidden': true });`,
+);
+stub(
+  'stub-link.mjs',
+  `import { createElement } from 'react';
+export default ({ prefetch, ...p }) => createElement('a', p);`,
+);
 stub(
   'stub-avatar.mjs',
   `import { createElement } from 'react';

@@ -43,6 +43,12 @@ const GRADIENT: Partial<
   // Stage (§9.4): a deep accent, OKLCH L .30, fading to bg, in both modes. Deep, so the accent's own
   // chroma (in gamut), not the quiet cap (builder's call).
   stage: { light: [0.3, 'bg'], dark: [0.3, 'bg'], chroma: Infinity },
+  // Creator (addendum §7.1): a deep accent, L .30 in dark and .92 in light, fading to bg, at the
+  // accent's own chroma (in gamut). Light stays pale, so no header is laid over it (§6.7).
+  creator: { light: [0.92, 'bg'], dark: [0.3, 'bg'], chroma: Infinity },
+  // Professional (addendum §7.2): two tints of the accent at low chroma, L .95 → .90 light and
+  // .28 → .22 dark, Clear's quiet cap.
+  professional: { light: [0.95, 0.9], dark: [0.28, 0.22] },
 };
 const GRADIENT_CHROMA = 0.035;
 

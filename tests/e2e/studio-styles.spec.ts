@@ -7,6 +7,12 @@ import {
   settled,
   studioModules,
 } from './studio-probes';
+import {
+  LINK_CASES,
+  LINKS_OF,
+  startStack,
+  type Stack,
+} from './profile-fixtures';
 
 // Page Studio styles, PR 2a (spec 2026-11-17-page-studio-styles §8, §9, §13, §14.3). Each style's
 // lab example (LAB_STYLE_EXAMPLES: default accent, natural mode, a generated cover photo, a text,
@@ -23,6 +29,8 @@ const STYLES = [
   'signboard',
   'sprint',
   'tiles',
+  'creator',
+  'professional',
 ] as const;
 const rootOf = (style: string) =>
   style === 'classic' ? '.profile-page' : '.studio';
@@ -106,6 +114,14 @@ for (const style of STYLES) {
   });
 
   test(`${style} keeps the tip form's behaviour`, async ({ page }) => {
+    // Creator's and Professional's in-page Tips are named by the words they show, "Support my work
+    // Give, tip or appreciate ₦…" and "Send a ₦… tip" (addendum §6.5, ruling S-R5).
+    const tipName =
+      style === 'creator'
+        ? /^Support my work/
+        : style === 'professional'
+          ? /^Send a\b/
+          : /^Tip/;
     // The standard page's form, read on a seeded Free page (the lab sends the same standard
     // amounts, since it passes none).
     const read = async () => {
@@ -200,7 +216,7 @@ for (const style of STYLES) {
     await other.fill('1,000');
     await styled.form
       .locator('.composer-action')
-      .getByRole('button', { name: /^Tip/ })
+      .getByRole('button', { name: tipName })
       .click();
     await expect(styled.form.locator('.tm-field-error').first()).toHaveText(
       standardError!,
@@ -217,7 +233,7 @@ for (const style of STYLES) {
     await expect(
       styled.form
         .locator('.composer-action')
-        .getByRole('button', { name: /^Tip/ }),
+        .getByRole('button', { name: tipName }),
     ).toContainText(styled.amounts[0]!.replace(' NGN', ''));
   });
 }
@@ -524,6 +540,18 @@ const EXACT: Partial<Record<string, readonly (keyof typeof DRAWN)[]>> = {
   // Sprint's photos run edge to edge: each photo block, and a gallery's widest photo, is the
   // screen (§9.6, ruling AC).
   sprint: ['photo', 'gallery'],
+  // Creator's main column is the slot (540), its strip tiles 156 (ruling P3).
+  creator: ['text', 'quote', 'photo', 'gallery', 'video', 'services', 'events'],
+  // Professional's blocks sit in one 640 column under the card, photos 3-up (208; ruling P3).
+  professional: [
+    'text',
+    'quote',
+    'photo',
+    'gallery',
+    'video',
+    'services',
+    'events',
+  ],
 };
 
 test("every new style draws every block within the design check's slot, and exactly where its column is the slot", async ({
@@ -539,6 +567,8 @@ test("every new style draws every block within the design check's slot, and exac
     'signboard',
     'sprint',
     'tiles',
+    'creator',
+    'professional',
   ] as const)
     for (const width of [390, 1024, 1440]) {
       await page.setViewportSize({ width, height: 900 });
@@ -590,6 +620,8 @@ for (const style of [
   'signboard',
   'sprint',
   'tiles',
+  'creator',
+  'professional',
 ] as const)
   test(`${style} fits every amount label inside its chip at 320, 360 and 375`, async ({
     page,
@@ -640,7 +672,12 @@ for (const style of [
       }
       // Two by two or four across, every chip stays a full target (§4.4: 44, as drawn 48). The
       // new styles' check; Clear's segments are its own (§9.2).
-      if (!['signboard', 'sprint', 'tiles'].includes(style)) continue;
+      if (
+        !['signboard', 'sprint', 'tiles', 'creator', 'professional'].includes(
+          style,
+        )
+      )
+        continue;
       const heights = await chips.evaluateAll((labels) =>
         labels.map((l) =>
           l.querySelector(':scope > span')!.getBoundingClientRect(),
@@ -1931,4 +1968,1171 @@ test("Tiles' links title grows with the text and never overlaps the link tiles (
   await expect
     .poll(measure)
     .toEqual({ titleHeight: 42, clearsLinks: true, alignedWithTip: true });
+});
+
+// ---------------------------------------------------------------------------------------------
+// Creator (addendum 2026-11-27-studio-creator-professional §6, §7.1; Creator plan Task 3) and the
+// owner's rule of 28 Nov: contrast, visibility (targets, nothing clipped, forced colours, 200%
+// zoom), smoothness (CLS, transform/opacity only, reduced motion) and fluidity (320 to 1440).
+
+const CREATOR = '/dev/studio-lab?style=creator';
+const boxOf = (page: Page, selector: string) =>
+  page
+    .locator(selector)
+    .first()
+    .evaluate((el) => {
+      const r = el.getBoundingClientRect();
+      return {
+        top: r.top + scrollY,
+        bottom: r.bottom + scrollY,
+        left: r.left,
+        right: r.right,
+        width: r.width,
+        height: r.height,
+      };
+    });
+/** Creator's parts in the order §9.6 fixes: identity, icon row, chips, Tip, rows, blocks, Powered by, footer. */
+const CREATOR_ORDER = [
+  '.studio-identity',
+  '.studio-icons',
+  '.studio-tip .amount-options',
+  '.studio-tip .composer-action .composer-submit',
+  '.studio-rows',
+  '.studio-section',
+  '.studio-powered',
+  '.profile-foot',
+];
+
+test("Creator's DOM order holds at 390 and 1440, and the sticky bar watches the in-page Tip", async ({
+  page,
+}) => {
+  for (const width of [390, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto(CREATOR);
+    await ready(page);
+    // Document order, and on a phone reading order down the page too.
+    const order = await page.evaluate((selectors) => {
+      const els = selectors.map((s) => document.querySelector(s));
+      return els.every(
+        (el, i) =>
+          el &&
+          (i === 0 ||
+            els[i - 1]!.compareDocumentPosition(el) &
+              Node.DOCUMENT_POSITION_FOLLOWING),
+      );
+    }, CREATOR_ORDER);
+    expect(order, `document order at ${width}`).toBe(true);
+    const tops = [];
+    for (const selector of CREATOR_ORDER)
+      tops.push((await boxOf(page, selector)).top);
+    if (width === 390)
+      expect(
+        [...tops].sort((a, b) => a - b),
+        'down the page',
+      ).toEqual(tops);
+    else {
+      // A desktop: identity, icons and Tip in the 420 column on the left; rows and blocks beside
+      // it in the main column (gap 80), Powered by and the footer under both.
+      const side = await boxOf(page, '.studio-side');
+      const main = await boxOf(page, '.studio-grid');
+      expect(Math.round(side.width)).toBe(420);
+      expect(Math.round(main.left - side.right)).toBe(80);
+      expect(Math.round(main.width)).toBe(540);
+      for (const s of CREATOR_ORDER.slice(0, 4))
+        expect((await boxOf(page, s)).right, s).toBeLessThanOrEqual(
+          side.right + 0.5,
+        );
+      for (const s of CREATOR_ORDER.slice(4, 6))
+        expect((await boxOf(page, s)).left, s).toBeGreaterThanOrEqual(
+          main.left - 0.5,
+        );
+      expect(tops[6]!).toBeGreaterThan(Math.max(side.bottom, main.bottom));
+    }
+  }
+  // The phone's bar: down while the in-page Tip is on screen, up once it has scrolled away.
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(CREATOR);
+  await ready(page);
+  const form = page.locator('form[data-skin="creator"]');
+  const tip = page.locator('.studio-tip .composer-action .composer-submit');
+  await tip.scrollIntoViewIfNeeded();
+  await expect(form).toHaveAttribute('data-bar', 'hidden');
+  await page.evaluate(() =>
+    scrollTo({
+      top: document.documentElement.scrollHeight,
+      behavior: 'instant',
+    }),
+  );
+  await expect(form).toHaveAttribute('data-bar', 'shown');
+  const pill = page.locator('.tip-bar__button');
+  await expect(pill).toBeVisible();
+  await expect(pill).toHaveText(/^Tip ₦/);
+  expect((await pill.boundingBox())!.height).toBeGreaterThanOrEqual(48);
+  await tip.scrollIntoViewIfNeeded();
+  await expect(form).toHaveAttribute('data-bar', 'hidden');
+});
+
+test("Creator's Tip and sticky pill draw their 1 px edges in deepEdge and deepBarEdge", async ({
+  page,
+}) => {
+  const { contracts } = await studioModules();
+  await page.setViewportSize({ width: 390, height: 844 });
+  for (const [mode, accent] of [
+    ['dark', null],
+    ['light', 'amber'],
+    ['dark', 'violet'],
+  ] as const) {
+    await page.goto(
+      `${CREATOR}&mode=${mode}${accent ? `&accent=${accent}` : ''}`,
+    );
+    await ready(page);
+    const t = contracts.studioTokens('creator', accent)[mode];
+    const rgb = (hex: string) =>
+      `rgb(${[1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)).join(', ')})`;
+    const edge = (selector: string) =>
+      page
+        .locator(selector)
+        .first()
+        .evaluate((el) => {
+          const cs = getComputedStyle(el);
+          return [cs.borderTopWidth, cs.borderTopStyle, cs.borderTopColor];
+        });
+    expect(
+      await edge('.studio-tip .composer-submit'),
+      `${mode} ${accent}`,
+    ).toEqual(['1px', 'solid', rgb(t.deepEdge!)]);
+    expect(await edge('.tip-bar__button'), `${mode} ${accent}`).toEqual([
+      '1px',
+      'solid',
+      rgb(t.deepBarEdge!),
+    ]);
+  }
+});
+
+test('Creator renders each visible link exactly once in every link case', async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  let stack: Stack | undefined;
+  try {
+    stack = await startStack('test');
+    for (const width of [390, 1440]) {
+      await page.setViewportSize({ width, height: 900 });
+      for (const links of LINK_CASES) {
+        await page.goto(`${stack.origin}/@creatorlinks${links}`);
+        await page.locator('.studio[data-style="creator"]').waitFor();
+        const shown = await page
+          .locator('.studio a[href^="http"]')
+          .evaluateAll((as) =>
+            as
+              .filter((a) => (a as HTMLElement).offsetParent !== null)
+              .map((a) => a.getAttribute('href')),
+          );
+        const want = LINKS_OF[links].map((l) => l.url);
+        expect([...shown].sort(), `${links} at ${width}`).toEqual(
+          [...want].sort(),
+        );
+        // None drawn twice, none hidden in a copy.
+        for (const url of want)
+          await expect(
+            page.locator(`.studio a[href="${url}"]`),
+            `${links} ${url}`,
+          ).toHaveCount(1);
+        await expect(page.locator('.studio-icons')).toHaveCount(
+          links === 'none' || links === 'onerow' || links === 'allrow' ? 0 : 1,
+        );
+        await expect(page.locator('.studio-rows')).toHaveCount(
+          links === 'none' || links === 'oneicon' || links === 'allicon'
+            ? 0
+            : 1,
+        );
+        expect(await geometryProblems(page), `${links} at ${width}`).toEqual(
+          [],
+        );
+      }
+      // The featured Instagram is the first row, not an icon (Review Focus 1).
+      await page.goto(`${stack.origin}/@creatorlinksmixed`);
+      await page.locator('.studio-rows').waitFor();
+      await expect(
+        page.locator('.studio-rows .studio-link').first(),
+      ).toHaveAttribute('href', 'https://www.instagram.com/kemisings');
+      await expect(
+        page.locator('.studio-icons a[href*="instagram.com"]'),
+      ).toHaveCount(0);
+      // Eight links make two rows of icons at most, never sideways scroll.
+      expect(await fitsViewport(page)).toBe(true);
+    }
+  } finally {
+    await stack?.stop();
+  }
+});
+
+test('with no photo and no bio, Creator keeps its overlap and leaves no gap', async ({
+  page,
+}) => {
+  let stack: Stack | undefined;
+  try {
+    stack = await startStack('test');
+    for (const width of [390, 1440]) {
+      await page.setViewportSize({ width, height: 900 });
+      const read = async (handle: string) => {
+        await page.goto(`${stack!.origin}/@${handle}`);
+        await page.locator('.studio[data-style="creator"]').waitFor();
+        await page.evaluate(() => document.fonts.ready);
+        await settled(page);
+        return {
+          cover: await boxOf(page, '.studio-cover'),
+          avatar: await boxOf(page, '.studio-avatar'),
+          meta: await boxOf(page, '.studio-meta'),
+          icons: await boxOf(page, '.studio-icons'),
+          bio: (await page.locator('.studio-bio').count())
+            ? await boxOf(page, '.studio-bio')
+            : null,
+          initials: await page
+            .locator('.studio-avatar')
+            .first()
+            .evaluate((el) => el.classList.contains('avatar--initials')),
+        };
+      };
+      const bare = await read('creatornophoto');
+      const full = await read('stylecreator');
+      expect(bare.bio).toBeNull();
+      expect(bare.initials).toBe(true);
+      // The initials disc sits half over the cover's faded foot.
+      expect(
+        Math.abs(bare.cover.bottom - bare.avatar.top - bare.avatar.height / 2),
+        `${width}`,
+      ).toBeLessThanOrEqual(1);
+      // No hole where the bio would be.
+      const gap = (r: typeof bare) => r.icons.top - r.meta.bottom;
+      expect(
+        Math.abs(
+          gap(bare) - (gap(full) - (full.bio!.bottom - full.meta.bottom)),
+        ),
+        `${width}`,
+      ).toBeLessThanOrEqual(1);
+    }
+  } finally {
+    await stack?.stop();
+  }
+});
+
+test('Creator with Ink draws a visible Tip in Dark and in Auto under a dark colour scheme', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const fill = () =>
+    page
+      .locator('.studio-tip .composer-submit')
+      .evaluate((el) => getComputedStyle(el).backgroundImage);
+  await page.goto(`${CREATOR}&mode=dark&accent=ink`);
+  await ready(page);
+  expect(await fill()).toMatch(/^linear-gradient\(rgb\(242, 242, 244\)/);
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await page.goto(`${CREATOR}&mode=auto&accent=ink`);
+  await ready(page);
+  expect(await fill()).toMatch(/^linear-gradient\(rgb\(242, 242, 244\)/);
+  // Its words keep 4.5:1 there, and the page's own probe finds nothing.
+  expect(await contrastProblems(page)).toEqual([]);
+  // Light: Ink's near-black on the lilac page.
+  await page.emulateMedia({ colorScheme: 'light' });
+  await page.goto(`${CREATOR}&mode=auto&accent=ink`);
+  await ready(page);
+  expect(await fill()).toMatch(/^linear-gradient\(rgb\(29, 29, 31\)/);
+});
+
+test("Creator's Tip fits the largest amount at 320 without clipping", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 320, height: 800 });
+  await page.goto(CREATOR);
+  await ready(page);
+  const form = page.locator('form[data-skin="creator"]');
+  await form.locator('label', { hasText: 'Custom' }).click();
+  // The largest amount the form takes (12 digits of kobo, lib/tip-amounts.ts).
+  await page.getByLabel(/^Other amount/).fill('9,999,999,999.99');
+  await page.getByLabel(/^Other amount/).blur();
+  const tip = form.locator('.composer-action .composer-submit');
+  await expect(tip).toHaveAccessibleName(
+    'Support my work Give, tip or appreciate ₦9,999,999,999.99',
+  );
+  await expect(tip).toContainText('₦9,999,999,999.99');
+  expect(await geometryProblems(page)).toEqual([]);
+  // The amount has wrapped under the second line, inside the button.
+  const words = await tip.evaluate((b) => {
+    const r = (s: string) => b.querySelector(s)!.getBoundingClientRect();
+    return {
+      line2: r('.tip-skin__line--second'),
+      amount: r('.tip-skin__amount'),
+      button: b.getBoundingClientRect(),
+    };
+  });
+  expect(words.amount.top).toBeGreaterThanOrEqual(words.line2.bottom - 0.5);
+  expect(words.amount.right).toBeLessThanOrEqual(words.button.right);
+  // At 390 a usual amount sits at the right, on the lines' row.
+  await page.setViewportSize({ width: 390, height: 800 });
+  await form.locator('.tm-amount-choice').first().click();
+  await settled(page);
+  const usual = await tip.evaluate((b) => {
+    const r = (s: string) => b.querySelector(s)!.getBoundingClientRect();
+    return { lines: r('.tip-skin__lines'), amount: r('.tip-skin__amount') };
+  });
+  expect(usual.amount.top).toBeLessThan(usual.lines.bottom);
+  expect(usual.amount.left).toBeGreaterThan(usual.lines.left);
+});
+
+test('while a tip starts, Creator\'s Tip reads "Starting your tip…"', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  // Hold the quote and the start: the in-between state stays on screen.
+  await page.route('**/v1/tip-quotes', () => undefined);
+  await page.route('**/v1/tip-intents', () => undefined);
+  await page.goto(CREATOR);
+  await ready(page);
+  const tip = page.locator('.studio-tip .composer-action .composer-submit');
+  await page.locator('.studio-tip .tm-amount-choice').first().click();
+  await expect(tip).toHaveAccessibleName(
+    /^Support my work Give, tip or appreciate ₦/,
+  );
+  await tip.click();
+  await expect(tip).toHaveText('Starting your tip…');
+  await expect(tip).toHaveAccessibleName('Starting your tip…');
+  await expect(tip).toHaveAttribute('aria-busy', 'true');
+  expect(await geometryProblems(page)).toEqual([]);
+});
+
+test("every site's row words fit one line of a Creator row at 320", async ({
+  page,
+}) => {
+  const { contracts } = await studioModules();
+  await page.setViewportSize({ width: 320, height: 800 });
+  await page.goto(`${CREATOR}&links=8`);
+  await ready(page);
+  const words = contracts.SOCIAL_PLATFORM_KEYS.map((key) =>
+    contracts.linkRowWords(key),
+  );
+  const fits = await page
+    .locator('.studio-rows .studio-link__title')
+    .first()
+    .evaluate((title, all: string[]) => {
+      const line = parseFloat(getComputedStyle(title).lineHeight);
+      return all.map((w) => {
+        title.textContent = w;
+        return {
+          w,
+          lines: Math.round(title.getBoundingClientRect().height / line),
+          fits: title.scrollWidth <= title.clientWidth + 0.5,
+        };
+      });
+    }, words);
+  for (const f of fits) {
+    expect(f.lines, f.w).toBe(1);
+    expect(f.fits, f.w).toBe(true);
+  }
+});
+
+// The owner's rule of 28 Nov, for Creator and Professional alike: targets, forced colours (every
+// control keeps a drawn edge, the sticky pill included, and "Powered by tipme" stays in the
+// system's ink), fluidity from 320 to 1440 and 200% zoom, and smoothness at 320, 390 and 1440.
+const OWN = (style: 'creator' | 'professional') =>
+  `/dev/studio-lab?style=${style}`;
+for (const style of ['creator', 'professional'] as const) {
+  const name = style === 'creator' ? 'Creator' : 'Professional';
+  test(`${name}'s targets are at least 44 px, and its parts stay visible under forced colours`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(`${OWN(style)}&links=8`);
+    await ready(page);
+    const small = await page.evaluate(() =>
+      [
+        ...document.querySelectorAll(
+          '.studio-icon, .studio-link, .studio-powered, .studio-tip .tm-amount-choice > span, .studio-tip .composer-submit',
+        ),
+      ]
+        .map((el) => {
+          const r = el.getBoundingClientRect();
+          return { what: el.className, w: r.width, h: r.height };
+        })
+        .filter((r) => r.w < 44 || r.h < 44),
+    );
+    expect(small).toEqual([]);
+    const tip = await boxOf(page, '.studio-tip .composer-submit');
+    expect(tip.height).toBeGreaterThanOrEqual(style === 'creator' ? 72 : 56);
+    await page.emulateMedia({ forcedColors: 'active' });
+    await page.goto(`${OWN(style)}&links=8`);
+    await ready(page);
+    // Forced colours drop fills: every control keeps a drawn edge, in a colour that shows.
+    const edges = await page.evaluate(() =>
+      [
+        ...document.querySelectorAll(
+          '.studio-icon, .studio-link, .studio-tip .tm-amount-choice > span, .studio-tip .composer-submit, .tip-bar__button',
+        ),
+      ].map((el) => {
+        const cs = getComputedStyle(el);
+        return {
+          what: el.className,
+          border:
+            cs.borderTopStyle !== 'none' &&
+            parseFloat(cs.borderTopWidth) >= 1 &&
+            !/^rgba\(.*, 0\)$|^transparent$/.test(cs.borderTopColor),
+        };
+      }),
+    );
+    expect(edges.length).toBeGreaterThan(10);
+    for (const e of edges) expect(e.border, e.what).toBe(true);
+    // "Powered by tipme": its words and the wordmark in the system's ink, on the system's canvas.
+    const powered = await page.evaluate(() => {
+      const probe = document.createElement('span');
+      probe.style.color = 'CanvasText';
+      probe.style.backgroundColor = 'Canvas';
+      document.body.append(probe);
+      const ink = getComputedStyle(probe).color;
+      const canvas = getComputedStyle(probe).backgroundColor;
+      probe.remove();
+      const link = document.querySelector('.studio-powered')!;
+      const mark = document.querySelector('.studio-powered__mark')!;
+      return {
+        ink,
+        canvas,
+        words: getComputedStyle(link).color,
+        mark: getComputedStyle(mark, '::before').backgroundColor,
+      };
+    });
+    expect(powered.mark).toBe(powered.ink);
+    expect(powered.words).not.toBe(powered.canvas);
+    expect(await geometryProblems(page)).toEqual([]);
+  });
+
+  test(`${name} is fluid from 320 to 1440 and at 200% zoom, with nothing clipped`, async ({
+    page,
+  }) => {
+    test.setTimeout(120_000);
+    for (const mode of ['dark', 'light'] as const) {
+      await page.setViewportSize({ width: 1440, height: 900 });
+      await page.goto(`${OWN(style)}&mode=${mode}&links=8`);
+      await ready(page);
+      // 640 is a 1280 screen at 200% zoom (WCAG 1.4.4, 1.4.10).
+      for (const width of [
+        320, 360, 390, 430, 600, 640, 768, 900, 1024, 1280, 1440,
+      ]) {
+        await page.setViewportSize({ width, height: 900 });
+        expect(await geometryProblems(page), `${mode} at ${width}`).toEqual([]);
+        expect(await fitsViewport(page), `${mode} at ${width}`).toBe(true);
+      }
+    }
+  });
+
+  test(`${name} loads without layout shift at 320, 390 and 1440, moves only by transform and opacity, and honours reduced motion`, async ({
+    page,
+  }) => {
+    test.setTimeout(120_000);
+    await page.addInitScript(() => {
+      (window as unknown as { cls: number }).cls = 0;
+      new PerformanceObserver((list) => {
+        for (const e of list.getEntries() as (PerformanceEntry & {
+          value: number;
+          hadRecentInput: boolean;
+        })[])
+          if (!e.hadRecentInput)
+            (window as unknown as { cls: number }).cls += e.value;
+      }).observe({ type: 'layout-shift', buffered: true });
+    });
+    for (const motion of ['no-preference', 'reduce'] as const)
+      for (const width of [320, 390, 1440]) {
+        await page.emulateMedia({ reducedMotion: motion });
+        await page.setViewportSize({ width, height: 900 });
+        await page.goto(OWN(style));
+        await ready(page);
+        await page.waitForFunction(() =>
+          [...document.images].every((i) => i.loading === 'lazy' || i.complete),
+        );
+        await settled(page);
+        expect(
+          await page.evaluate(() => (window as unknown as { cls: number }).cls),
+          `${motion} at ${width}`,
+        ).toBeLessThan(0.1);
+        // Every animation and transition the page runs moves transform or opacity only.
+        const props = await page.evaluate(() => {
+          const out = new Set<string>();
+          for (const el of document.querySelectorAll('.studio *')) {
+            const cs = getComputedStyle(el);
+            const durations = cs.transitionDuration.split(',');
+            cs.transitionProperty.split(',').forEach((p, i) => {
+              const d = durations[i % durations.length]!;
+              // Under reduced motion the site sets every transition to 0.01 ms (globals.css):
+              // under 1 ms nothing moves.
+              if (parseFloat(d) >= 0.001)
+                out.add(`${p.trim()} (${el.className})`);
+            });
+          }
+          for (const a of document.getAnimations()) {
+            const effect = a.effect as KeyframeEffect | null;
+            if (
+              !(a instanceof CSSAnimation) ||
+              !effect?.target?.closest('.studio')
+            )
+              continue;
+            for (const k of effect.getKeyframes())
+              for (const p of Object.keys(k))
+                if (
+                  !['offset', 'easing', 'composite', 'computedOffset'].includes(
+                    p,
+                  )
+                )
+                  out.add(`${p} (${a.animationName})`);
+          }
+          return [...out];
+        });
+        // The frame's sticky bar shows with visibility (a step, not a fade), as every style's
+        // does; translate and scale are transforms.
+        for (const p of props)
+          expect(
+            ['transform', 'translate', 'scale', 'opacity', 'visibility'],
+            `${p} at ${width}`,
+          ).toContain(p.replace(/ \(.*$/, ''));
+        if (motion === 'no-preference') continue;
+        // Reduced motion: Creator's avatar and name fade only; nothing scales when pressed.
+        if (style === 'creator')
+          expect(
+            await page
+              .locator('.studio-name')
+              .evaluate((el) => getComputedStyle(el).animationName),
+          ).toBe('studio-creator-fade');
+        const tip = page.locator('.studio-tip .composer-submit');
+        await tip.scrollIntoViewIfNeeded();
+        await tip.hover();
+        await page.mouse.down();
+        expect(
+          await tip.evaluate((el) => getComputedStyle(el).transform),
+          `at ${width}`,
+        ).toBe('none');
+        // Released off the button: no click, so no tip starts.
+        await page.mouse.move(1, 1);
+        await page.mouse.up();
+      }
+  });
+}
+
+// Ruling S-R5 (design-board audit, WCAG 2.5.3): each name is what shows. The Tip is named by both
+// its lines and the amount; an icon link by its site and handle, never the badge's letters; "Powered
+// by tipme" as two words and the brand. And axe finds nothing on Creator, light or dark.
+test("Creator's names are the words it shows, and axe finds nothing in light or dark", async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  for (const mode of ['light', 'dark'] as const)
+    for (const width of [390, 1440]) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto(`${CREATOR}&mode=${mode}&links=8`);
+      await ready(page);
+      const tip = page.locator('.studio-tip .composer-action .composer-submit');
+      const shown = (await tip.evaluate((b) => (b as HTMLElement).innerText))
+        .replace(/\s+/g, ' ')
+        .trim();
+      expect(shown).toBe('Support my work Give, tip or appreciate ₦2,000');
+      await expect(tip).toHaveAccessibleName(shown);
+      await expect(tip).not.toHaveAttribute('aria-label');
+      // The icon row's links: the site and handle; the badge letters stay out of the tree.
+      await expect(
+        page.locator('.studio-icons a[href*="instagram.com"]'),
+      ).toHaveAccessibleName('Instagram: @kemisings, opens in a new tab');
+      await expect(
+        page.locator('.studio-icons a[href*="tiktok.com"]'),
+      ).toHaveAccessibleName('TikTok: @kemisings, opens in a new tab');
+      expect(
+        await page
+          .locator('.studio-icons .link-badge')
+          .evaluateAll((badges) =>
+            badges.every((b) => b.getAttribute('aria-hidden') === 'true'),
+          ),
+      ).toBe(true);
+      await expect(page.locator('.studio-powered')).toHaveAccessibleName(
+        'Powered by TipMe',
+      );
+      // Axe: no violation at all (so none serious or critical), light and dark.
+      await expectAccessible(page);
+    }
+});
+
+// ---------------------------------------------------------------------------------------------
+// Professional (addendum 2026-11-27-studio-creator-professional §6.5, §6.6, §7.2; Creator plan
+// Task 4; the canvas board "Professional · phone"): the card rising over the cover holds the
+// identity, the icon row, the link rows, the chips, the "Send a tip" pill and "Powered by tipme";
+// the blocks follow the card.
+
+const PROFESSIONAL = '/dev/studio-lab?style=professional';
+const PROFESSIONAL_ORDER = [
+  '.studio-card .studio-identity',
+  '.studio-card .studio-icons',
+  '.studio-card .studio-rows',
+  '.studio-card .studio-tip .amount-options',
+  '.studio-card .studio-tip .composer-action .composer-submit',
+  '.studio-card .studio-powered',
+  '.studio-grid .studio-section',
+  '.profile-foot',
+];
+
+test("Professional's DOM order holds at 390 and 1440, and the sticky bar watches the in-page Tip", async ({
+  page,
+}) => {
+  for (const width of [390, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto(PROFESSIONAL);
+    await ready(page);
+    const order = await page.evaluate((selectors) => {
+      const els = selectors.map((s) => document.querySelector(s));
+      return els.every(
+        (el, i) =>
+          el &&
+          (i === 0 ||
+            els[i - 1]!.compareDocumentPosition(el) &
+              Node.DOCUMENT_POSITION_FOLLOWING),
+      );
+    }, PROFESSIONAL_ORDER);
+    expect(order, `document order at ${width}`).toBe(true);
+    const cover = await boxOf(page, '.studio-cover');
+    const card = await boxOf(page, '.studio-card');
+    // The card rises 112 over the photo's foot on a phone, 160 on a desktop (§7.2).
+    expect(Math.round(cover.bottom - card.top), `rise at ${width}`).toBe(
+      width === 390 ? 112 : 160,
+    );
+    // The avatar sits centred on the card's top edge.
+    const avatar = await boxOf(page, '.studio-avatar');
+    expect(
+      Math.abs(avatar.top + avatar.height / 2 - card.top),
+    ).toBeLessThanOrEqual(1);
+    expect(Math.round(avatar.height)).toBe(width === 390 ? 96 : 120);
+    const blocks = await boxOf(page, '.studio-grid');
+    expect(blocks.top).toBeGreaterThanOrEqual(card.bottom);
+    const tops = [];
+    for (const selector of PROFESSIONAL_ORDER)
+      tops.push((await boxOf(page, selector)).top);
+    if (width === 390) {
+      // Inset 12 from the screen's edges; down the page in reading order.
+      expect(Math.round(card.left)).toBe(12);
+      expect(Math.round(card.width)).toBe(366);
+      expect(
+        [...tops].sort((a, b) => a - b),
+        'down the page',
+      ).toEqual(tops);
+    } else {
+      // A 960 card: the identity and icon row on the left; the rows, chips, Tip and Powered by in
+      // the right column (400), gap 56; the blocks in one centred column of 640 below it.
+      expect(Math.round(card.width)).toBe(960);
+      const side = await boxOf(page, '.studio-card__side');
+      const main = await boxOf(page, '.studio-card__main');
+      expect(Math.round(main.width)).toBe(400);
+      expect(Math.round(main.left - side.right)).toBe(56);
+      for (const s of PROFESSIONAL_ORDER.slice(0, 2))
+        expect((await boxOf(page, s)).right, s).toBeLessThanOrEqual(
+          side.right + 0.5,
+        );
+      for (const s of PROFESSIONAL_ORDER.slice(2, 6)) {
+        const r = await boxOf(page, s);
+        expect(r.left, s).toBeGreaterThanOrEqual(main.left - 0.5);
+        expect(r.right, s).toBeLessThanOrEqual(main.right + 0.5);
+      }
+      expect(Math.round(blocks.width)).toBe(640);
+      expect(
+        Math.abs(blocks.left + blocks.width / 2 - (card.left + card.width / 2)),
+      ).toBeLessThanOrEqual(1);
+    }
+  }
+  // The phone's bar: down while the in-page Tip is on screen, up once it has scrolled away.
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(PROFESSIONAL);
+  await ready(page);
+  const form = page.locator('form[data-skin="professional"]');
+  const tip = page.locator('.studio-tip .composer-action .composer-submit');
+  await tip.scrollIntoViewIfNeeded();
+  await expect(form).toHaveAttribute('data-bar', 'hidden');
+  await page.evaluate(() =>
+    scrollTo({
+      top: document.documentElement.scrollHeight,
+      behavior: 'instant',
+    }),
+  );
+  await expect(form).toHaveAttribute('data-bar', 'shown');
+  const pill = page.locator('.tip-bar__button');
+  await expect(pill).toBeVisible();
+  await expect(pill).toHaveText(/^Tip ₦/);
+  expect((await pill.boundingBox())!.height).toBeGreaterThanOrEqual(48);
+  // The bar is solid bg (§6.5), no glass.
+  expect(
+    await page
+      .locator('.tip-bar')
+      .evaluate((el) => getComputedStyle(el).backdropFilter),
+  ).toBe('none');
+  await tip.scrollIntoViewIfNeeded();
+  await expect(form).toHaveAttribute('data-bar', 'hidden');
+});
+
+test("Professional's pill and sticky pill draw their 1 px edges in tipEdge and tipBarEdge", async ({
+  page,
+}) => {
+  const { contracts } = await studioModules();
+  await page.setViewportSize({ width: 390, height: 844 });
+  for (const [mode, accent] of [
+    ['light', 'amber'],
+    ['light', null],
+    ['dark', 'violet'],
+  ] as const) {
+    await page.goto(
+      `${PROFESSIONAL}&mode=${mode}${accent ? `&accent=${accent}` : ''}`,
+    );
+    await ready(page);
+    const t = contracts.studioTokens('professional', accent)[mode];
+    const rgb = (hex: string) =>
+      `rgb(${[1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)).join(', ')})`;
+    const edge = (selector: string) =>
+      page
+        .locator(selector)
+        .first()
+        .evaluate((el) => {
+          const cs = getComputedStyle(el);
+          return [cs.borderTopWidth, cs.borderTopStyle, cs.borderTopColor];
+        });
+    expect(
+      await edge('.studio-tip .composer-submit'),
+      `${mode} ${accent}`,
+    ).toEqual(['1px', 'solid', rgb(t.tipEdge!)]);
+    expect(await edge('.tip-bar__button'), `${mode} ${accent}`).toEqual([
+      '1px',
+      'solid',
+      rgb(t.tipBarEdge!),
+    ]);
+    // The edge as drawn keeps 3.25 against the card the pill sits on.
+    expect(
+      contracts.contrastRatio(
+        t.tipEdge as `#${string}`,
+        t.card as `#${string}`,
+      ),
+      `${mode} ${accent}`,
+    ).toBeGreaterThanOrEqual(3.25);
+  }
+});
+
+test('Professional renders each visible link exactly once in every link case', async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  let stack: Stack | undefined;
+  try {
+    stack = await startStack('test');
+    for (const width of [390, 1440]) {
+      await page.setViewportSize({ width, height: 900 });
+      for (const links of LINK_CASES) {
+        await page.goto(`${stack.origin}/@professionallinks${links}`);
+        await page.locator('.studio[data-style="professional"]').waitFor();
+        const shown = await page
+          .locator('.studio a[href^="http"]')
+          .evaluateAll((as) =>
+            as
+              .filter((a) => (a as HTMLElement).offsetParent !== null)
+              .map((a) => a.getAttribute('href')),
+          );
+        const want = LINKS_OF[links].map((l) => l.url);
+        expect([...shown].sort(), `${links} at ${width}`).toEqual(
+          [...want].sort(),
+        );
+        for (const url of want)
+          await expect(
+            page.locator(`.studio a[href="${url}"]`),
+            `${links} ${url}`,
+          ).toHaveCount(1);
+        // Every link sits inside the card.
+        await expect(
+          page.locator('.studio a[href^="http"]:not(.studio-card *)'),
+        ).toHaveCount(0);
+        await expect(page.locator('.studio-icons')).toHaveCount(
+          links === 'none' || links === 'onerow' || links === 'allrow' ? 0 : 1,
+        );
+        await expect(page.locator('.studio-rows')).toHaveCount(
+          links === 'none' || links === 'oneicon' || links === 'allicon'
+            ? 0
+            : 1,
+        );
+        expect(await geometryProblems(page), `${links} at ${width}`).toEqual(
+          [],
+        );
+      }
+      await page.goto(`${stack.origin}/@professionallinksmixed`);
+      await page.locator('.studio-rows').waitFor();
+      await expect(
+        page.locator('.studio-rows .studio-link').first(),
+      ).toHaveAttribute('href', 'https://www.instagram.com/kemisings');
+      await expect(
+        page.locator('.studio-icons a[href*="instagram.com"]'),
+      ).toHaveCount(0);
+      expect(await fitsViewport(page)).toBe(true);
+    }
+  } finally {
+    await stack?.stop();
+  }
+});
+
+test("Professional's Ink pill is near-black on light and Ink's light pill in dark", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const fill = () =>
+    page
+      .locator('.studio-tip .composer-submit')
+      .evaluate((el) => getComputedStyle(el).backgroundColor);
+  // Ink is Professional's default.
+  await page.goto(`${PROFESSIONAL}&mode=light`);
+  await ready(page);
+  expect(await fill()).toBe('rgb(29, 29, 31)');
+  await page.goto(`${PROFESSIONAL}&mode=dark&accent=ink`);
+  await ready(page);
+  expect(await fill()).toBe('rgb(242, 242, 244)');
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await page.goto(`${PROFESSIONAL}&mode=auto`);
+  await ready(page);
+  expect(await fill()).toBe('rgb(242, 242, 244)');
+  expect(await contrastProblems(page)).toEqual([]);
+  await page.emulateMedia({ colorScheme: 'light' });
+});
+
+test("Professional's pill fits the largest amount at 320 without clipping", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 320, height: 800 });
+  await page.goto(PROFESSIONAL);
+  await ready(page);
+  const form = page.locator('form[data-skin="professional"]');
+  await form.locator('label', { hasText: 'Custom' }).click();
+  await page.getByLabel(/^Other amount/).fill('9,999,999,999.99');
+  await page.getByLabel(/^Other amount/).blur();
+  const tip = form.locator('.composer-action .composer-submit');
+  await expect(tip).toHaveAccessibleName('Send a ₦9,999,999,999.99 tip');
+  await expect(tip).toContainText('₦9,999,999,999.99');
+  expect(await geometryProblems(page)).toEqual([]);
+  // The words wrap inside the pill; the heart stays inside it too.
+  const parts = await tip.evaluate((b) => {
+    const r = (s: string) => b.querySelector(s)!.getBoundingClientRect();
+    return {
+      words: r('.tip-skin__words'),
+      heart: r('.tip-skin__heart'),
+      button: b.getBoundingClientRect(),
+    };
+  });
+  for (const part of [parts.words, parts.heart]) {
+    expect(part.left).toBeGreaterThanOrEqual(parts.button.left);
+    expect(part.right).toBeLessThanOrEqual(parts.button.right);
+    expect(part.top).toBeGreaterThanOrEqual(parts.button.top);
+    expect(part.bottom).toBeLessThanOrEqual(parts.button.bottom);
+  }
+  expect(await fitsViewport(page)).toBe(true);
+});
+
+test('while a tip starts, Professional\'s pill reads "Starting your tip…"', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.route('**/v1/tip-quotes', () => undefined);
+  await page.route('**/v1/tip-intents', () => undefined);
+  await page.goto(PROFESSIONAL);
+  await ready(page);
+  const tip = page.locator('.studio-tip .composer-action .composer-submit');
+  await page.locator('.studio-tip .tm-amount-choice').first().click();
+  await expect(tip).toHaveAccessibleName(/^Send a ₦[\d,]+ tip$/);
+  await tip.click();
+  await expect(tip).toHaveText('Starting your tip…');
+  await expect(tip).toHaveAccessibleName('Starting your tip…');
+  await expect(tip).toHaveAttribute('aria-busy', 'true');
+  expect(await geometryProblems(page)).toEqual([]);
+});
+
+test("with no photo and no bio, Professional keeps the avatar on the card's top edge and leaves no gap", async ({
+  page,
+}) => {
+  let stack: Stack | undefined;
+  try {
+    stack = await startStack('test');
+    for (const width of [390, 1440]) {
+      await page.setViewportSize({ width, height: 900 });
+      const read = async (handle: string) => {
+        await page.goto(`${stack!.origin}/@${handle}`);
+        await page.locator('.studio[data-style="professional"]').waitFor();
+        await page.evaluate(() => document.fonts.ready);
+        await settled(page);
+        return {
+          card: await boxOf(page, '.studio-card'),
+          avatar: await boxOf(page, '.studio-avatar'),
+          meta: await boxOf(page, '.studio-meta'),
+          icons: await boxOf(page, '.studio-icons'),
+          bio: (await page.locator('.studio-bio').count())
+            ? await boxOf(page, '.studio-bio')
+            : null,
+          initials: await page
+            .locator('.studio-avatar')
+            .first()
+            .evaluate((el) => el.classList.contains('avatar--initials')),
+        };
+      };
+      const bare = await read('professionalnophoto');
+      const full = await read('styleprofessional');
+      expect(bare.bio).toBeNull();
+      expect(bare.initials).toBe(true);
+      // The initials disc is centred on the card's top edge.
+      expect(
+        Math.abs(bare.avatar.top + bare.avatar.height / 2 - bare.card.top),
+        `${width}`,
+      ).toBeLessThanOrEqual(1);
+      const gap = (r: typeof bare) => r.icons.top - r.meta.bottom;
+      expect(
+        Math.abs(
+          gap(bare) - (gap(full) - (full.bio!.bottom - full.meta.bottom)),
+        ),
+        `${width}`,
+      ).toBeLessThanOrEqual(1);
+    }
+  } finally {
+    await stack?.stop();
+  }
+});
+
+// Ruling S-R3: every site's row words fit one line of Professional's narrower card rows at 320.
+// The board's 156 px held neither "Watch me on YouTube" (158) nor "My WhatsApp channel" (161), so
+// below 360 the card's sides are 16 and the words have 164.
+test("every site's row words fit one line of a Professional row at 320", async ({
+  page,
+}) => {
+  const { contracts } = await studioModules();
+  await page.setViewportSize({ width: 320, height: 800 });
+  await page.goto(`${PROFESSIONAL}&links=8`);
+  await ready(page);
+  const words = contracts.SOCIAL_PLATFORM_KEYS.map((key) =>
+    contracts.linkRowWords(key),
+  );
+  const title = page.locator('.studio-rows .studio-link__title').first();
+  expect(
+    Math.round(
+      await title.evaluate(
+        (el) => el.parentElement!.getBoundingClientRect().width,
+      ),
+    ),
+  ).toBe(164);
+  const fits = await title.evaluate((el, all: string[]) => {
+    const line = parseFloat(getComputedStyle(el).lineHeight);
+    return all.map((w) => {
+      el.textContent = w;
+      return {
+        w,
+        lines: Math.round(el.getBoundingClientRect().height / line),
+        fits: el.scrollWidth <= el.clientWidth + 0.5,
+      };
+    });
+  }, words);
+  expect(fits.length).toBe(contracts.SOCIAL_PLATFORM_KEYS.length);
+  for (const f of fits) {
+    expect(f.lines, f.w).toBe(1);
+    expect(f.fits, f.w).toBe(true);
+  }
+});
+
+// Ruling S-R5: the pill is named by the words it shows, the heart decoration; icon links by site and
+// handle, never the badge's letters; "Powered by tipme" as "Powered by TipMe". Axe finds nothing.
+test("Professional's names are the words it shows, and axe finds nothing in light or dark", async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  for (const mode of ['light', 'dark'] as const)
+    for (const width of [390, 1440]) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto(`${PROFESSIONAL}&mode=${mode}&links=8`);
+      await ready(page);
+      const tip = page.locator('.studio-tip .composer-action .composer-submit');
+      const shown = (await tip.evaluate((b) => (b as HTMLElement).innerText))
+        .replace(/\s+/g, ' ')
+        .trim();
+      expect(shown).toBe('Send a ₦2,000 tip');
+      await expect(tip).toHaveAccessibleName(shown);
+      await expect(tip).not.toHaveAttribute('aria-label');
+      await expect(tip.locator('.tip-skin__heart')).toHaveAttribute(
+        'aria-hidden',
+        'true',
+      );
+      await expect(
+        page.locator('.studio-icons a[href*="instagram.com"]'),
+      ).toHaveAccessibleName('Instagram: @kemisings, opens in a new tab');
+      expect(
+        await page
+          .locator('.studio-icons .link-badge')
+          .evaluateAll((badges) =>
+            badges.every((b) => b.getAttribute('aria-hidden') === 'true'),
+          ),
+      ).toBe(true);
+      await expect(page.locator('.studio-powered')).toHaveAccessibleName(
+        'Powered by TipMe',
+      );
+      // No verified mark anywhere (owner).
+      await expect(page.locator('.studio')).not.toContainText(/verified/i);
+      await expectAccessible(page);
+    }
+});
+
+// The layout probe can't see one box over another (Task 4: text blocks once took the rising card's
+// rules and overlapped the photos). Professional's blocks stack down one column, each as wide as
+// its content box, none over another, at 320, 390, 768 (the 720 card) and 1440.
+test("Professional's blocks stack down one column at 320, 390, 768 and 1440", async ({
+  page,
+}) => {
+  for (const width of [320, 390, 768, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto(PROFESSIONAL);
+    await ready(page);
+    const card = await boxOf(page, '.studio-page > .studio-card');
+    const grid = await page.locator('.studio-grid').evaluate((el) => {
+      const r = el.getBoundingClientRect();
+      const cs = getComputedStyle(el);
+      return {
+        top: r.top + scrollY,
+        width:
+          r.width - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight),
+      };
+    });
+    expect(grid.top, `${width}`).toBeGreaterThanOrEqual(card.bottom);
+    const stacked = await page
+      .locator('.studio-grid .studio-block')
+      .evaluateAll((els) =>
+        els.map((el) => {
+          const r = el.getBoundingClientRect();
+          const inner = el.firstElementChild!.getBoundingClientRect();
+          return {
+            top: r.top,
+            bottom: r.bottom,
+            w: r.width,
+            innerW: inner.width,
+            innerTop: inner.top - r.top,
+          };
+        }),
+      );
+    expect(stacked.length).toBeGreaterThan(3);
+    for (const [i, b] of stacked.entries()) {
+      const at = `block ${i} at ${width}`;
+      expect(Math.abs(b.w - grid.width), at).toBeLessThanOrEqual(0.5);
+      expect(Math.abs(b.innerW - b.w), at).toBeLessThanOrEqual(0.5);
+      expect(b.innerTop, at).toBeGreaterThanOrEqual(-0.5);
+      if (i > 0)
+        expect(b.top, at).toBeGreaterThanOrEqual(stacked[i - 1]!.bottom - 0.5);
+    }
+  }
+});
+
+// Fix round 1 (review I1): hovered, a Tip lightens its fill alone; its 1 px edge keeps the colour
+// proven against what it sits on (Professional's pill on the card at 3.25, Creator's Tip on the
+// page at 3), in light, dark and auto under a dark colour scheme.
+test('a hovered Tip keeps its edge: Professional and Creator, light, dark and auto-dark', async ({
+  page,
+}) => {
+  const { contracts } = await studioModules();
+  const rgb = (hex: string) =>
+    `rgb(${[1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)).join(', ')})`;
+  await page.setViewportSize({ width: 390, height: 844 });
+  for (const [style, mode, accent, scheme] of [
+    ['professional', 'light', 'amber', 'light'],
+    ['professional', 'dark', null, 'dark'],
+    ['professional', 'auto', null, 'dark'],
+    ['professional', 'auto', 'amber', 'light'],
+    ['creator', 'light', 'amber', 'light'],
+    ['creator', 'dark', null, 'dark'],
+  ] as const) {
+    await page.emulateMedia({ colorScheme: scheme });
+    await page.goto(
+      `/dev/studio-lab?style=${style}&mode=${mode}${accent ? `&accent=${accent}` : ''}`,
+    );
+    await ready(page);
+    const drawn = mode === 'auto' ? scheme : mode;
+    const t = contracts.studioTokens(style, accent)[drawn];
+    const tip = page.locator('.studio-tip .composer-action .composer-submit');
+    const read = () =>
+      tip.evaluate((el) => {
+        const cs = getComputedStyle(el);
+        return {
+          edge: cs.borderTopColor,
+          fill: cs.backgroundColor,
+          image: cs.backgroundImage,
+          filter: cs.filter,
+        };
+      });
+    const before = await read();
+    await tip.hover();
+    await expect
+      .poll(async () => {
+        const r = await read();
+        return style === 'professional' ? r.fill : r.image;
+      })
+      .not.toBe(style === 'professional' ? before.fill : before.image);
+    const hovered = await read();
+    const label = `${style} ${mode} ${accent} ${scheme}`;
+    expect(hovered.edge, label).toBe(before.edge);
+    expect(hovered.filter, label).toBe('none');
+    if (style === 'professional') {
+      expect(hovered.edge, label).toBe(rgb(t.tipEdge!));
+      expect(hovered.fill, label).toBe(rgb(t.tipHover!));
+      expect(
+        contracts.contrastRatio(
+          t.tipEdge as `#${string}`,
+          t.card as `#${string}`,
+        ),
+        label,
+      ).toBeGreaterThanOrEqual(3.25);
+    } else {
+      expect(hovered.edge, label).toBe(rgb(t.deepEdge!));
+      expect(hovered.image, label).toContain(rgb(t.deepHover!));
+      expect(
+        contracts.contrastRatio(
+          t.deepEdge as `#${string}`,
+          t.bg as `#${string}`,
+        ),
+        label,
+      ).toBeGreaterThanOrEqual(3);
+    }
+    await page.mouse.move(1, 1);
+  }
+  await page.emulateMedia({ colorScheme: 'light' });
+});
+
+// Forced colours drop the selected chip's accText border colour: Professional marks it with a
+// Highlight outline as the board draws it.
+test("under forced colours Professional's selected chip carries a Highlight outline", async ({
+  page,
+}) => {
+  await page.emulateMedia({ forcedColors: 'active' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(PROFESSIONAL);
+  await ready(page);
+  const marks = await page.evaluate(() => {
+    const probe = document.createElement('span');
+    probe.style.color = 'Highlight';
+    document.body.append(probe);
+    const highlight = getComputedStyle(probe).color;
+    probe.remove();
+    const spans = [
+      ...document.querySelectorAll('.studio-tip .tm-amount-choice'),
+    ].map((label) => {
+      const span = label.querySelector(':scope > span')!;
+      const cs = getComputedStyle(span);
+      return {
+        checked: label.querySelector('input')!.checked,
+        style: cs.outlineStyle,
+        width: parseFloat(cs.outlineWidth),
+        colour: cs.outlineColor,
+      };
+    });
+    return { highlight, spans };
+  });
+  const checked = marks.spans.filter((m) => m.checked);
+  expect(checked.length).toBe(1);
+  expect(checked[0]).toMatchObject({
+    style: 'solid',
+    width: 3,
+    colour: marks.highlight,
+  });
+  for (const m of marks.spans.filter((x) => !x.checked))
+    expect(m.style).toBe('none');
 });

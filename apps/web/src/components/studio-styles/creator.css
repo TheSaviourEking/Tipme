@@ -1,0 +1,932 @@
+/* Creator: "Bold, personal, made to be shared" (addendum 2026-11-27-studio-creator-professional
+   §6.5, §6.6, §7.1, §7.3, §7.5). Inter only: name 800, section titles 750. Radii 16 (rows and
+   cards), 20 (the Tip), pill (chips), circle (avatar and icons). A full-bleed photo cover whose
+   lower 45% fades to bg; the avatar sits on the faded foot and every word is on solid bg, never on
+   the photo. The Tip is the deep button (the accent's light pair in both modes) with a 1 px edge
+   that keeps 3:1 on the page (ruling S-R2). No glow, no shadows. Only transform and opacity
+   animate; colour changes on hover are immediate. */
+
+.studio[data-style='creator'] {
+  --gutter: 20px;
+  --measure: 100%;
+  --tall: 488px;
+  --avatar: 112px;
+  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  letter-spacing: 0;
+}
+
+.studio[data-style='creator'] :is(.studio-side, .studio-grid, .studio-foot) {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: calc(var(--measure) + 2 * var(--gutter));
+  margin-inline: auto;
+  padding-inline: var(--gutter);
+}
+
+/* The cover. Photo: 488 tall (640 from 1024), its lower 45% fading to opaque bg. Gradient: a deep
+   accent (L .30 dark, .92 light) fading to bg, 280 tall. Plain: none. */
+.studio[data-style='creator'] .studio-cover {
+  background: var(--studio-el2);
+}
+
+.studio[data-style='creator'] .studio-cover[data-cover='photo'] {
+  height: var(--tall);
+}
+
+.studio[data-style='creator'] .studio-cover__fade {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to bottom,
+    transparent 55%,
+    var(--studio-bg) 80%,
+    var(--studio-bg) 100%
+  );
+}
+
+.studio[data-style='creator'] .studio-cover[data-cover='gradient'] {
+  height: 280px;
+  background: linear-gradient(
+    180deg,
+    var(--studio-coverFrom),
+    var(--studio-bg)
+  );
+}
+
+.studio[data-style='creator'] .studio-cover[data-cover='plain'] {
+  display: none;
+}
+
+/* The identity, centred, on solid bg. The avatar overlaps the cover's foot by half its height;
+   with no cover it starts the page, 32 px under the header. Positioned, so it paints over the
+   cover. */
+.studio[data-style='creator'] .studio-side {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+.studio[data-style='creator'] .studio-cover[data-cover='plain'] + .studio-side {
+  padding-top: 32px;
+}
+
+.studio[data-style='creator'] .studio-identity {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 0;
+  text-align: center;
+}
+
+.studio[data-style='creator'] .studio-avatar {
+  box-sizing: border-box;
+  width: var(--avatar);
+  height: var(--avatar);
+  margin-top: calc(var(--avatar) / -2);
+  border: 4px solid var(--studio-bg);
+  font-size: 36px;
+}
+
+.studio[data-style='creator']
+  .studio-cover[data-cover='plain']
+  + .studio-side
+  .studio-avatar {
+  margin-top: 0;
+}
+
+.studio[data-style='creator'] .studio-name {
+  margin-top: 16px;
+  font-size: 30px;
+  font-weight: 800;
+  line-height: 36px;
+  letter-spacing: -0.03em;
+}
+
+/* A name that would take a third line steps down about 80% (§7.5). */
+.studio[data-style='creator'] .studio-name--long {
+  font-size: 24px;
+  line-height: 30px;
+}
+
+.studio[data-style='creator'] .studio-meta {
+  margin-top: 6px;
+  color: var(--studio-fg2);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 20px;
+}
+
+.studio[data-style='creator'] .studio-bio {
+  max-width: 34em;
+  margin-top: 12px;
+  font-size: 16px;
+  line-height: 24px;
+}
+
+.studio[data-style='creator'] .studio-celebration {
+  margin-top: 12px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: var(--studio-card);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 18px;
+}
+
+/* Load: the avatar and the name fade up 8 px (reduced motion: fade only). */
+@keyframes studio-creator-rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+@keyframes studio-creator-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+.studio[data-style='creator']
+  .studio-identity
+  :is(.studio-avatar, .studio-name) {
+  animation: studio-creator-rise 240ms var(--ease) both;
+}
+
+/* The icon row: 44 px circles on el2, gap 12, centred, wrapping; each the site's badge in fg. */
+.studio[data-style='creator'] .studio-icons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: center;
+  margin-top: 20px;
+}
+
+.studio[data-style='creator'] .studio-icon {
+  box-sizing: border-box;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border: 1px solid transparent;
+  border-radius: 50%;
+  background: var(--studio-el2);
+  color: var(--studio-fg);
+  text-decoration: none;
+  transition: transform 220ms var(--ease);
+}
+
+.studio[data-style='creator'] .studio-icon:active {
+  transform: scale(0.96);
+}
+
+.studio[data-style='creator'] .studio-icon .link-badge {
+  min-width: 0;
+  height: auto;
+  padding: 0;
+  background: none;
+  font-size: 12px;
+}
+
+/* The shared fields and buttons move only by transform here (owner, 28 Nov): colour changes are
+   immediate. */
+.studio[data-style='creator'] :is(.tm-input, .tm-button) {
+  transition: transform 220ms var(--ease);
+}
+
+/* The Tip moment: four pill chips 48 tall on card, a 1 px control edge; selected, a 1.5 px accText
+   ring at 650. Then the 72 px deep button. */
+.studio[data-style='creator'] .studio-tip {
+  margin-top: 24px;
+}
+
+.studio[data-style='creator'] .studio-tip form {
+  display: grid;
+  gap: 12px;
+}
+
+.studio[data-style='creator'] .studio-tip .amount-options {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+/* Narrow phones: below 340 px four chips leave a label less room than "₦10,000" needs. */
+@media (max-width: 339px) {
+  .studio[data-style='creator'] .studio-tip .amount-options {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.studio[data-style='creator'] .studio-tip .tm-amount-choice > span {
+  min-height: 48px;
+  padding: 0;
+  border: 1px solid var(--studio-control);
+  border-radius: 999px;
+  background: var(--studio-card);
+  box-shadow: none;
+  color: var(--studio-fg);
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 20px;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  transform: none;
+  transition: transform 220ms var(--ease);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .studio[data-style='creator'] .studio-tip .tm-amount-choice:hover > span {
+    background: var(--studio-el2);
+    transform: none;
+  }
+}
+
+.studio[data-style='creator']
+  .studio-tip
+  .tm-amount-choice
+  input:active
+  + span {
+  box-shadow: none;
+  transform: scale(0.96);
+}
+
+.studio[data-style='creator']
+  .studio-tip
+  .tm-amount-choice
+  input:checked
+  + span {
+  border-color: var(--studio-accText);
+  background: var(--studio-card);
+  box-shadow: inset 0 0 0 0.5px var(--studio-accText);
+  color: var(--studio-fg);
+  font-weight: 650;
+}
+
+.studio[data-style='creator']
+  .studio-tip
+  .tm-amount-choice
+  input:checked
+  + span::after {
+  display: none;
+}
+
+.studio[data-style='creator']
+  .studio-tip
+  .tm-amount-choice[data-suggested='true']
+  > span {
+  outline: 2px solid var(--studio-accText);
+  outline-offset: -2px;
+}
+
+.studio[data-style='creator'] .studio-tip .tm-field label {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 18px;
+}
+
+.studio[data-style='creator'] .studio-tip .tm-input {
+  min-height: 48px;
+  padding: 0 16px;
+  border-radius: 16px;
+  font-size: 17px;
+  line-height: 22px;
+}
+
+.studio[data-style='creator'] .studio-tip textarea.tm-input {
+  padding: 12px 16px;
+}
+
+.studio[data-style='creator'] .studio-tip .composer-extras summary {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  min-height: 44px;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 20px;
+  list-style: none;
+  cursor: pointer;
+}
+
+.studio[data-style='creator']
+  .studio-tip
+  .composer-extras
+  summary::-webkit-details-marker {
+  display: none;
+}
+
+.studio[data-style='creator'] .studio-tip .composer-extras summary::after {
+  width: 7px;
+  height: 7px;
+  margin-inline-start: auto;
+  border-right: 1.5px solid var(--studio-fg2);
+  border-bottom: 1.5px solid var(--studio-fg2);
+  content: '';
+  transform: rotate(45deg);
+}
+
+.studio[data-style='creator']
+  .studio-tip
+  .composer-extras[open]
+  summary::after {
+  transform: rotate(-135deg);
+}
+
+.studio[data-style='creator'] .studio-tip .composer-extras__body {
+  display: grid;
+  gap: 12px;
+  padding: 4px 0 8px;
+}
+
+.studio[data-style='creator'] .studio-tip .tip-remember {
+  min-height: 44px;
+  align-items: center;
+  font-size: 15px;
+}
+
+/* The deep button (§6.5): 72 tall, r20, full width; a heart, "Support my work" over "Give, tip or
+   appreciate" (full opacity, ruling P2), the amount and a chevron. Its fill is the sheen from deep
+   to deepEnd; its 1 px edge is deepEdge (ruling S-R2). At 320 the amount wraps under line 2. */
+.studio[data-style='creator'] .studio-tip .composer-submit {
+  box-sizing: border-box;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 72px;
+  padding: 12px 18px;
+  border: 1px solid var(--studio-deepEdge);
+  border-radius: 20px;
+  background: linear-gradient(
+    180deg,
+    var(--studio-deep),
+    var(--studio-deepEnd)
+  );
+  box-shadow: none;
+  color: var(--studio-deepLabel);
+  font: 650 17px/22px var(--studio-ui);
+  font-variant-numeric: tabular-nums lining-nums;
+  letter-spacing: -0.01em;
+  text-align: start;
+  cursor: pointer;
+  transform: none;
+  transition: transform 220ms var(--ease);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  /* Hover (§7.1: brightness 1.06) lightens the sheen alone, never the edge: no filter. */
+  .studio[data-style='creator'] .studio-tip .composer-submit:hover {
+    background: linear-gradient(
+      180deg,
+      var(--studio-deepHover),
+      var(--studio-deepEndHover)
+    );
+    box-shadow: none;
+    filter: none;
+    transform: none;
+  }
+}
+
+.studio[data-style='creator'] .studio-tip .composer-submit:active {
+  box-shadow: none;
+  transform: scale(0.97);
+}
+
+.studio[data-style='creator']
+  .studio-tip
+  .composer-submit
+  :is(.tip-skin__heart, .tip-skin__chevron) {
+  display: block;
+  flex: none;
+}
+
+.studio[data-style='creator'] .studio-tip .tip-skin__heart {
+  fill: currentColor;
+}
+
+.studio[data-style='creator'] .studio-tip .tip-skin__chevron {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.studio[data-style='creator'] .studio-tip .tip-skin__words {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+  align-items: center;
+  min-width: 0;
+}
+
+.studio[data-style='creator'] .studio-tip .tip-skin__lines {
+  display: grid;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.studio[data-style='creator'] .studio-tip .tip-skin__line--second {
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 18px;
+  letter-spacing: 0;
+}
+
+.studio[data-style='creator'] .studio-tip .tip-skin__amount {
+  overflow-wrap: anywhere;
+}
+
+.studio[data-style='creator'] .studio-tip .composer-action {
+  display: grid;
+  gap: 8px;
+}
+
+.studio[data-style='creator']
+  .studio-tip
+  :is(.composer-disclaimer, .composer-trust, .composer-action__partner) {
+  margin: 0;
+  font-size: 12px;
+  line-height: 16px;
+  text-align: center;
+}
+
+.studio[data-style='creator'] .studio-tip .tip-quote__failed .tm-button {
+  min-height: 44px;
+  border-color: var(--studio-control);
+  border-radius: 999px;
+  background: var(--studio-card);
+  box-shadow: none;
+  color: var(--studio-fg);
+}
+
+.studio[data-style='creator'] .studio-tip .tm-slip {
+  border-color: var(--studio-line);
+  border-radius: 16px;
+  background: var(--studio-card);
+  box-shadow: none;
+  color: var(--studio-fg);
+}
+
+/* After the Tip: the rows, then the blocks, sections 32 apart. */
+.studio[data-style='creator'] .studio-grid {
+  display: grid;
+  gap: 32px;
+  margin-top: 32px;
+}
+
+.studio[data-style='creator'] .studio-blocks {
+  display: contents;
+}
+
+.studio[data-style='creator'] .studio-section {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+.studio[data-style='creator'] .studio-title {
+  font-size: 20px;
+  font-weight: 750;
+  line-height: 26px;
+  letter-spacing: -0.015em;
+}
+
+/* Rows: 56 tall, r16, card, 1 px line; a 32 px badge circle on el2, the row words 15/20 600, the
+   handle 13/18 fg2, a chevron in fg2. The words never truncate (ruling S-R3). */
+.studio[data-style='creator'] .studio-links__list {
+  display: grid;
+  gap: 8px;
+}
+
+.studio[data-style='creator'] .studio-link {
+  box-sizing: border-box;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  min-height: 56px;
+  padding: 8px 16px 8px 12px;
+  border: 1px solid var(--studio-line);
+  border-radius: 16px;
+  background: var(--studio-card);
+  color: var(--studio-fg);
+  text-decoration: none;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .studio[data-style='creator'] .studio-link:hover {
+    background-color: var(--studio-el2);
+  }
+}
+
+.studio[data-style='creator'] .studio-link .link-badge {
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 50%;
+}
+
+.studio[data-style='creator'] .studio-link__words {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.studio[data-style='creator'] .studio-link__title {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 20px;
+  letter-spacing: -0.01em;
+}
+
+.studio[data-style='creator'] .studio-link__sub {
+  overflow: hidden;
+  color: var(--studio-fg2);
+  font-size: 13px;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.studio[data-style='creator'] .studio-link__chevron {
+  flex: none;
+  fill: none;
+  stroke: var(--studio-fg2);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* Blocks (§7.3). Text: card r16, padding 20, 16/25, at most 62ch. */
+.studio[data-style='creator'] .studio-card {
+  border-radius: 16px;
+  background: var(--studio-card);
+}
+
+.studio[data-style='creator'] .studio-text {
+  display: grid;
+  gap: 12px;
+  max-width: 62ch;
+  padding: 20px;
+  font-size: 16px;
+  line-height: 25px;
+}
+
+/* Quote: no card; 20/28 600, an opening mark in fg2, a 2 px line rule on the left. */
+.studio[data-style='creator'] .studio-quote {
+  padding: 2px 0 2px 16px;
+  border-left: 2px solid var(--studio-line);
+  border-radius: 0;
+  background: none;
+}
+
+.studio[data-style='creator'] .studio-quote p {
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 28px;
+  letter-spacing: -0.01em;
+}
+
+.studio[data-style='creator'] .studio-quote p::before {
+  color: var(--studio-fg2);
+  content: '\201C';
+}
+
+.studio[data-style='creator'] .studio-photo img {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 9;
+  border-radius: 16px;
+  object-fit: cover;
+}
+
+.studio[data-style='creator'] :is(.studio-photo figcaption, .studio-fine) {
+  margin-top: 8px;
+  color: var(--studio-fg2);
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.studio[data-style='creator'] .studio-video {
+  overflow: hidden;
+  border-radius: 16px;
+}
+
+/* Photos: a strip of 156 × 208 tiles, r16, gap 8, at every width (ruling P3). */
+.studio[data-style='creator'] .studio-strip {
+  display: flex;
+  gap: 8px;
+  margin-inline: calc(-1 * var(--gutter));
+  padding-inline: var(--gutter);
+  overflow-x: auto;
+  scroll-padding-inline: var(--gutter);
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+}
+
+.studio[data-style='creator'] .studio-strip li {
+  flex: none;
+  width: 156px;
+  height: 208px;
+  overflow: hidden;
+  border-radius: 16px;
+  background: var(--studio-el2);
+  scroll-snap-align: start;
+}
+
+.studio[data-style='creator'] .studio-strip img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Services and events: rows on card r16, no chevron (nothing to open). */
+.studio[data-style='creator'] :is(ul.studio-events, div.studio-list > ul) {
+  display: grid;
+  gap: 8px;
+}
+
+.studio[data-style='creator'] :is(ul.studio-events, div.studio-list) {
+  background: none;
+}
+
+.studio[data-style='creator'] :is(ul.studio-events li, div.studio-list li) {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  min-height: 56px;
+  padding: 10px 16px;
+  border-radius: 16px;
+  background: var(--studio-card);
+}
+
+.studio[data-style='creator'] ul.studio-events li {
+  padding-inline-start: 12px;
+}
+
+.studio[data-style='creator'] .studio-list__words {
+  display: grid;
+  flex: 1;
+  gap: 2px;
+  min-width: 0;
+}
+
+.studio[data-style='creator'] .studio-list__title {
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 22px;
+  letter-spacing: -0.01em;
+}
+
+.studio[data-style='creator'] .studio-list__sub {
+  color: var(--studio-fg2);
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.studio[data-style='creator'] .studio-price {
+  flex: none;
+  font-size: 15px;
+  font-weight: 650;
+  line-height: 20px;
+}
+
+.studio[data-style='creator'] .studio-date {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 12px;
+  background: var(--studio-el2);
+  color: var(--studio-fg2);
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 14px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.studio[data-style='creator'] .studio-date__day {
+  order: -1;
+  color: var(--studio-fg);
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 24px;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+/* The foot: "Powered by" 12/16 500 fg2 and the wordmark 14 tall in fg (§6.6), then the footer. */
+.studio[data-style='creator'] .studio-foot {
+  margin-top: 40px;
+}
+
+.studio[data-style='creator'] .studio-powered {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  width: max-content;
+  min-height: 44px;
+  margin: 0 auto 16px;
+  color: var(--studio-fg2);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 16px;
+  text-decoration: none;
+}
+
+.studio[data-style='creator'] .studio-powered__mark {
+  height: 14px;
+  --logo-ink: var(--studio-fg);
+  --logo-accent: var(--studio-fg);
+}
+
+.studio[data-style='creator'] .studio-foot .profile-foot {
+  padding-top: 0;
+  color: var(--studio-fg2);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 16px;
+}
+
+.studio[data-style='creator']
+  .studio-foot
+  :is(.profile-foot a, .tm-button--quiet) {
+  color: var(--studio-fg2);
+  font: inherit;
+  text-decoration-color: var(--studio-accText);
+  text-decoration-thickness: 1.5px;
+}
+
+/* The phone's Tip bar (§6.5): bar + saturate(1.6) blur(20px), a 1 px line on top, a deep pill 48
+   tall reading "Tip ₦…", its edge deepBarEdge (3:1 on the bar over anything, ruling S-R2). */
+.studio[data-style='creator'] .tip-bar {
+  border-top: 1px solid var(--studio-line);
+  -webkit-backdrop-filter: saturate(1.6) blur(20px);
+  backdrop-filter: saturate(1.6) blur(20px);
+}
+
+.studio[data-style='creator'] .tip-bar__button {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 48px;
+  padding: 0 22px;
+  border: 1px solid var(--studio-deepBarEdge);
+  border-radius: 999px;
+  background: var(--studio-deep);
+  color: var(--studio-deepLabel);
+  font: 600 16px/20px var(--studio-ui);
+  font-variant-numeric: tabular-nums lining-nums;
+  letter-spacing: -0.01em;
+  cursor: pointer;
+  transition: transform 220ms var(--ease);
+}
+
+.studio[data-style='creator'] .tip-bar__button:active {
+  transform: scale(0.97);
+}
+
+/* Tablet: one column, 24 px gutters, up to 720; the cover stays full-bleed. */
+@media (min-width: 768px) {
+  .studio[data-style='creator'] {
+    --gutter: 24px;
+    --measure: 720px;
+  }
+}
+
+/* Desktop: content 1040. The cover spans the width (640 tall) and the 144 px avatar overlaps it on
+   the left of the content; a 420 px column (identity left-aligned, icon row, Tip) beside the main
+   column (rows, then blocks), gap 80. */
+@media (min-width: 1024px) {
+  .studio[data-style='creator'] {
+    --tall: 640px;
+    --avatar: 144px;
+  }
+
+  .studio[data-style='creator'] .studio-page {
+    display: grid;
+    grid-template-rows: auto auto 1fr;
+    grid-template-columns:
+      minmax(var(--gutter), 1fr) minmax(0, 420px) 80px minmax(0, 540px)
+      minmax(var(--gutter), 1fr);
+    align-items: start;
+  }
+
+  .studio[data-style='creator'] .studio-cover {
+    grid-row: 1;
+    grid-column: 1 / -1;
+  }
+
+  .studio[data-style='creator'] :is(.studio-side, .studio-grid, .studio-foot) {
+    max-width: none;
+    margin-inline: 0;
+    padding-inline: 0;
+  }
+
+  .studio[data-style='creator'] .studio-side {
+    grid-row: 2;
+    grid-column: 2;
+  }
+
+  .studio[data-style='creator']
+    .studio-cover[data-cover='plain']
+    + .studio-side {
+    padding-top: 56px;
+  }
+
+  .studio[data-style='creator'] .studio-identity {
+    align-items: flex-start;
+    text-align: start;
+  }
+
+  .studio[data-style='creator'] .studio-name {
+    margin-top: 20px;
+    font-size: 48px;
+    line-height: 54px;
+    letter-spacing: -0.035em;
+  }
+
+  .studio[data-style='creator'] .studio-name--long {
+    font-size: 38px;
+    line-height: 44px;
+  }
+
+  .studio[data-style='creator'] .studio-bio {
+    font-size: 18px;
+    line-height: 28px;
+  }
+
+  .studio[data-style='creator'] .studio-icons {
+    justify-content: flex-start;
+  }
+
+  .studio[data-style='creator'] .studio-grid {
+    grid-row: 2;
+    grid-column: 4;
+    margin-top: 40px;
+  }
+
+  .studio[data-style='creator']
+    .studio-cover[data-cover='plain']
+    ~ .studio-grid {
+    margin-top: 56px;
+  }
+
+  .studio[data-style='creator'] .studio-title {
+    font-size: 24px;
+    line-height: 30px;
+  }
+
+  .studio[data-style='creator'] .studio-strip {
+    margin-inline: 0;
+    padding-inline: 0;
+  }
+
+  .studio[data-style='creator'] .studio-foot {
+    align-self: end;
+    grid-row: 3;
+    grid-column: 2 / 5;
+    margin-top: 72px;
+  }
+}
+
+/* Reduced motion (§7.1): fades only. No rise, no press scale. */
+@media (prefers-reduced-motion: reduce) {
+  .studio[data-style='creator']
+    .studio-identity
+    :is(.studio-avatar, .studio-name) {
+    animation-name: studio-creator-fade;
+  }
+
+  .studio[data-style='creator']
+    :is(
+      .studio-icon:active,
+      .studio-tip .tm-amount-choice input:active + span,
+      .studio-tip .composer-submit:active,
+      .tip-bar__button:active
+    ) {
+    transform: none;
+  }
+}
+
+/* The header over the cover (frame.css), over a photo only: the cover runs up under the header,
+   so the avatar and the words stay where they were. */
+@supports (animation-timeline: view()) and (timeline-scope: none) {
+  .studio[data-style='creator'][data-header] .studio-cover[data-cover='photo'] {
+    box-sizing: content-box;
+    padding-top: var(--nav-height);
+  }
+}

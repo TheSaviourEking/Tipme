@@ -1,0 +1,907 @@
+/* Professional: "Clean, composed, easy to trust" (addendum 2026-11-27-studio-creator-professional
+   §6.5, §6.6, §7.2, §7.3, §7.5; the canvas board "Professional · phone"). Inter only: name 700,
+   section titles 650. Radii 24 (the card), 14 (rows, chips, photos), pill (the Tip), circle
+   (avatar and icons). An opaque card rises over the cover and holds the identity, the icon row,
+   the link rows, the chips, the "Send a tip" pill and "Powered by tipme"; the blocks follow it on
+   bg. No text on the photo, no shadow, no glass. The pill is the accent with a 1 px edge that keeps
+   3.25:1 on the card (rulings S-R2, S-R4). Only transform animates (180 ms ease-out, the owner's
+   rule of 28 Nov); colour changes on hover are immediate. */
+
+.studio[data-style='professional'] {
+  --gutter: 20px;
+  --inset: 12px;
+  --tall: 488px;
+  --rise: 112px;
+  --avatar: 96px;
+  --ease: ease-out;
+  letter-spacing: 0;
+}
+
+/* A flex column at every width: the space a short page leaves goes just above the foot. */
+.studio[data-style='professional'] .studio-page {
+  display: flex;
+  flex-direction: column;
+}
+
+.studio[data-style='professional'] .studio-page > .studio-grid {
+  margin-bottom: 0;
+}
+
+/* The cover. Photo: 488 tall (440 from 1024), full-bleed. Gradient: two low-chroma tints of the
+   accent, 240 tall. Your cover that isn't a photo: today's cover art in a 240 px band. Plain:
+   none. */
+.studio[data-style='professional'] .studio-cover {
+  flex: none;
+  background: var(--studio-el2);
+}
+
+.studio[data-style='professional'] .studio-cover[data-cover='photo'] {
+  height: var(--tall);
+}
+
+.studio[data-style='professional'] .studio-cover[data-cover='gradient'] {
+  height: 240px;
+  background: linear-gradient(
+    180deg,
+    var(--studio-coverFrom),
+    var(--studio-coverTo)
+  );
+}
+
+.studio[data-style='professional'] .studio-cover[data-cover='art'] {
+  height: 240px;
+}
+
+.studio[data-style='professional'] .studio-cover[data-cover='plain'] {
+  display: none;
+}
+
+/* The card: opaque, r24, inset 12 from the screen's edges, rising 112 over a photo's foot (96 over
+   gradient and art); with no cover it starts under the header, the avatar 24 below it. No shadow:
+   the opaque card on the photo separates itself (§7.2). */
+.studio[data-style='professional'] .studio-page > .studio-card {
+  position: relative;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin: calc(-1 * var(--rise)) var(--inset) 0;
+  padding: 0 20px 8px;
+  border-radius: 24px;
+  background: var(--studio-card);
+  box-shadow: none;
+  text-align: center;
+}
+
+.studio[data-style='professional']
+  .studio-cover:is([data-cover='gradient'], [data-cover='art'])
+  + .studio-card {
+  --rise: 96px;
+}
+
+.studio[data-style='professional']
+  .studio-cover[data-cover='plain']
+  + .studio-card {
+  margin-top: calc(24px + var(--avatar) / 2);
+}
+
+.studio[data-style='professional'] :is(.studio-card__side, .studio-card__main) {
+  display: flex;
+  flex-direction: column;
+  align-self: stretch;
+  min-width: 0;
+}
+
+.studio[data-style='professional'] .studio-card__side {
+  align-items: center;
+}
+
+/* The identity: the avatar centred on the card's top edge, then the name, meta and bio. */
+.studio[data-style='professional'] .studio-identity {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.studio[data-style='professional'] .studio-avatar {
+  box-sizing: border-box;
+  width: var(--avatar);
+  height: var(--avatar);
+  margin-top: calc(var(--avatar) / -2);
+  border: 4px solid var(--studio-card);
+  font-size: 32px;
+}
+
+.studio[data-style='professional'] .studio-name {
+  margin-top: 14px;
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 32px;
+  letter-spacing: -0.02em;
+}
+
+/* A name that would take a third line steps down about 80% (§7.5). */
+.studio[data-style='professional'] .studio-name--long {
+  font-size: 21px;
+  line-height: 26px;
+}
+
+.studio[data-style='professional'] .studio-meta {
+  margin-top: 4px;
+  color: var(--studio-fg2);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 20px;
+}
+
+.studio[data-style='professional'] .studio-bio {
+  max-width: 34em;
+  margin-top: 10px;
+  color: var(--studio-fg2);
+  font-size: 15px;
+  line-height: 22px;
+}
+
+.studio[data-style='professional'] .studio-celebration {
+  margin-top: 10px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: var(--studio-el2);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 18px;
+}
+
+/* The icon row: 44 px targets holding 40 px glyph circles on el2 (the 2 px clear border; under
+   forced colours it is the drawn ring), gap 12, centred, wrapping. */
+.studio[data-style='professional'] .studio-icons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: center;
+  margin-top: 18px;
+}
+
+.studio[data-style='professional'] .studio-icon {
+  box-sizing: border-box;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border: 2px solid transparent;
+  border-radius: 50%;
+  background: var(--studio-el2);
+  background-clip: padding-box;
+  color: var(--studio-fg);
+  text-decoration: none;
+  transition: transform 180ms var(--ease);
+}
+
+.studio[data-style='professional'] .studio-icon:active {
+  transform: scale(0.98);
+}
+
+.studio[data-style='professional'] .studio-icon .link-badge {
+  min-width: 0;
+  height: auto;
+  padding: 0;
+  background: none;
+  font-size: 12px;
+}
+
+/* The link rows (§7.2): 56 tall, r14, on row, 1 px line; a 32 px badge, the row words 15/20 600,
+   the handle 13/18 fg2, a chevron in fg2. 156 px of words at 320; they never truncate (S-R3). */
+.studio[data-style='professional'] .studio-rows {
+  align-self: stretch;
+  margin-top: 20px;
+  text-align: start;
+}
+
+.studio[data-style='professional'] .studio-links__list {
+  display: grid;
+  gap: 8px;
+}
+
+.studio[data-style='professional'] .studio-link {
+  box-sizing: border-box;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  min-height: 56px;
+  padding: 6px 14px 6px 12px;
+  border: 1px solid var(--studio-line);
+  border-radius: 14px;
+  background: var(--studio-row);
+  color: var(--studio-fg);
+  text-decoration: none;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .studio[data-style='professional'] .studio-link:hover {
+    background-color: var(--studio-el2);
+  }
+}
+
+.studio[data-style='professional'] .studio-link .link-badge {
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 50%;
+  font-size: 11px;
+}
+
+.studio[data-style='professional'] .studio-link__words {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.studio[data-style='professional'] .studio-link__title {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 20px;
+  letter-spacing: -0.01em;
+}
+
+.studio[data-style='professional'] .studio-link__sub {
+  overflow: hidden;
+  color: var(--studio-fg2);
+  font-size: 13px;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.studio[data-style='professional'] .studio-link__chevron {
+  flex: none;
+  fill: none;
+  stroke: var(--studio-fg2);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* The shared fields and buttons move only by transform here (owner, 28 Nov). */
+.studio[data-style='professional'] :is(.tm-input, .tm-button) {
+  transition: transform 180ms var(--ease);
+}
+
+/* The Tip moment: four chips 44 tall, r14, on row, a 1 px control edge; selected, a 1.5 px accText
+   border at 650. Then the 56 px pill. */
+.studio[data-style='professional'] .studio-tip {
+  align-self: stretch;
+  margin-top: 20px;
+  text-align: start;
+}
+
+.studio[data-style='professional'] .studio-tip form {
+  display: grid;
+  gap: 12px;
+}
+
+.studio[data-style='professional'] .studio-tip .amount-options {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+/* Narrow phones: below 360 px four chips in the card leave a label less room than "₦10,000", and
+   the board's 156 px of row words can't hold "Watch me on YouTube" (158) or "My WhatsApp channel"
+   (161) on one line (ruling S-R3): the card's sides are 16, giving the words 164. */
+@media (max-width: 359px) {
+  .studio[data-style='professional'] .studio-page > .studio-card {
+    padding-inline: 16px;
+  }
+
+  .studio[data-style='professional'] .studio-tip .amount-options {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.studio[data-style='professional'] .studio-tip .tm-amount-choice > span {
+  min-height: 44px;
+  padding: 0;
+  border: 1px solid var(--studio-control);
+  border-radius: 14px;
+  background: var(--studio-row);
+  box-shadow: none;
+  color: var(--studio-fg);
+  font-size: 15px;
+  font-weight: 550;
+  line-height: 20px;
+  white-space: nowrap;
+  transform: none;
+  transition: transform 180ms var(--ease);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .studio[data-style='professional']
+    .studio-tip
+    .tm-amount-choice:hover
+    > span {
+    background: var(--studio-el2);
+    transform: none;
+  }
+}
+
+.studio[data-style='professional']
+  .studio-tip
+  .tm-amount-choice
+  input:active
+  + span {
+  box-shadow: none;
+  transform: scale(0.98);
+}
+
+.studio[data-style='professional']
+  .studio-tip
+  .tm-amount-choice
+  input:checked
+  + span {
+  border-color: var(--studio-accText);
+  background: var(--studio-row);
+  box-shadow: inset 0 0 0 0.5px var(--studio-accText);
+  color: var(--studio-fg);
+  font-weight: 650;
+}
+
+.studio[data-style='professional']
+  .studio-tip
+  .tm-amount-choice
+  input:checked
+  + span::after {
+  display: none;
+}
+
+.studio[data-style='professional']
+  .studio-tip
+  .tm-amount-choice[data-suggested='true']
+  > span {
+  outline: 2px solid var(--studio-accText);
+  outline-offset: -2px;
+}
+
+.studio[data-style='professional'] .studio-tip .tm-field label {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 18px;
+}
+
+.studio[data-style='professional'] .studio-tip .tm-input {
+  min-height: 48px;
+  padding: 0 16px;
+  border-radius: 14px;
+  background: var(--studio-row);
+  font-size: 17px;
+  line-height: 22px;
+}
+
+.studio[data-style='professional'] .studio-tip textarea.tm-input {
+  padding: 12px 16px;
+}
+
+.studio[data-style='professional'] .studio-tip .composer-extras summary {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  min-height: 44px;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 20px;
+  list-style: none;
+  cursor: pointer;
+}
+
+.studio[data-style='professional']
+  .studio-tip
+  .composer-extras
+  summary::-webkit-details-marker {
+  display: none;
+}
+
+.studio[data-style='professional'] .studio-tip .composer-extras summary::after {
+  width: 7px;
+  height: 7px;
+  margin-inline-start: auto;
+  border-right: 1.5px solid var(--studio-fg2);
+  border-bottom: 1.5px solid var(--studio-fg2);
+  content: '';
+  transform: rotate(45deg);
+}
+
+.studio[data-style='professional']
+  .studio-tip
+  .composer-extras[open]
+  summary::after {
+  transform: rotate(-135deg);
+}
+
+.studio[data-style='professional'] .studio-tip .composer-extras__body {
+  display: grid;
+  gap: 12px;
+  padding: 4px 0 8px;
+}
+
+.studio[data-style='professional'] .studio-tip .tip-remember {
+  min-height: 44px;
+  align-items: center;
+  font-size: 15px;
+}
+
+/* The pill (§6.5): 56 tall, full width, acc / accLabel, "Send a ₦2,000 tip" 17/22 600 and a heart
+   after it. Its 1 px edge is tipEdge (3.25:1 on the card, rulings S-R2, S-R4). The largest amount
+   wraps its words inside the pill at 320. */
+.studio[data-style='professional'] .studio-tip .composer-submit {
+  box-sizing: border-box;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 56px;
+  padding: 8px 20px;
+  border: 1px solid var(--studio-tipEdge);
+  border-radius: 999px;
+  background: var(--studio-acc);
+  box-shadow: none;
+  color: var(--studio-accLabel);
+  font: 600 17px/22px var(--studio-ui);
+  font-variant-numeric: tabular-nums lining-nums;
+  letter-spacing: -0.01em;
+  text-align: center;
+  cursor: pointer;
+  transform: none;
+  transition: transform 180ms var(--ease);
+}
+
+/* Hover (§7.2: brightness 1.08, dark 0.94) lightens the fill alone: tipHover, a token per mode (so
+   auto-dark gets the dark one), never a filter, which would lighten the proven edge too. */
+@media (hover: hover) and (pointer: fine) {
+  .studio[data-style='professional'] .studio-tip .composer-submit:hover {
+    background: var(--studio-tipHover);
+    box-shadow: none;
+    filter: none;
+    transform: none;
+  }
+}
+
+.studio[data-style='professional'] .studio-tip .composer-submit:active {
+  box-shadow: none;
+  transform: scale(0.98);
+}
+
+.studio[data-style='professional'] .studio-tip .tip-skin__words {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.studio[data-style='professional']
+  .studio-tip
+  .composer-submit
+  .tip-skin__heart {
+  display: block;
+  flex: none;
+  fill: currentColor;
+}
+
+.studio[data-style='professional'] .studio-tip .composer-action {
+  display: grid;
+  gap: 8px;
+}
+
+.studio[data-style='professional']
+  .studio-tip
+  :is(.composer-disclaimer, .composer-trust, .composer-action__partner) {
+  margin: 0;
+  font-size: 12px;
+  line-height: 16px;
+  text-align: center;
+}
+
+.studio[data-style='professional'] .studio-tip .tip-quote__failed .tm-button {
+  min-height: 44px;
+  border-color: var(--studio-control);
+  border-radius: 999px;
+  background: var(--studio-row);
+  box-shadow: none;
+  color: var(--studio-fg);
+}
+
+.studio[data-style='professional'] .studio-tip .tm-slip {
+  border-color: var(--studio-line);
+  border-radius: 14px;
+  background: var(--studio-row);
+  box-shadow: none;
+  color: var(--studio-fg);
+}
+
+/* "Powered by tipme" at the card's foot (§6.6): "Powered by" 12/16 500 fg2, the wordmark 14 tall
+   in fg; a 44 px target. */
+.studio[data-style='professional'] .studio-powered {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  align-self: center;
+  min-height: 44px;
+  margin-top: 4px;
+  padding: 0 8px;
+  color: var(--studio-fg2);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 16px;
+  text-decoration: none;
+}
+
+.studio[data-style='professional'] .studio-powered__mark {
+  height: 14px;
+  --logo-ink: var(--studio-fg);
+  --logo-accent: var(--studio-fg);
+}
+
+/* After the card: the blocks on bg, in one column, sections 32 apart. */
+.studio[data-style='professional'] .studio-grid {
+  box-sizing: border-box;
+  display: grid;
+  gap: 32px;
+  width: 100%;
+  max-width: calc(720px + 2 * var(--gutter));
+  margin: 32px auto 0;
+  padding-inline: var(--gutter);
+}
+
+.studio[data-style='professional'] .studio-blocks {
+  display: contents;
+}
+
+.studio[data-style='professional'] .studio-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.studio[data-style='professional'] .studio-title {
+  font-size: 18px;
+  font-weight: 650;
+  line-height: 24px;
+  letter-spacing: -0.01em;
+}
+
+/* Blocks (§7.3). Text and quote: row r14, a 1 px line. The accent never fills a block. */
+.studio[data-style='professional'] .studio-text {
+  display: grid;
+  gap: 12px;
+  padding: 18px;
+  border: 1px solid var(--studio-line);
+  border-radius: 14px;
+  background: var(--studio-row);
+  font-size: 16px;
+  line-height: 25px;
+}
+
+.studio[data-style='professional'] .studio-quote {
+  padding: 18px;
+  border: 1px solid var(--studio-line);
+  border-radius: 14px;
+  background: var(--studio-row);
+}
+
+.studio[data-style='professional'] .studio-quote p {
+  font-size: 18px;
+  font-weight: 500;
+  line-height: 27px;
+}
+
+.studio[data-style='professional'] .studio-quote p::before {
+  color: var(--studio-fg2);
+  content: '\201C';
+}
+
+.studio[data-style='professional'] .studio-photo img {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 9;
+  border-radius: 14px;
+  object-fit: cover;
+}
+
+.studio[data-style='professional'] :is(.studio-photo figcaption, .studio-fine) {
+  margin-top: 8px;
+  color: var(--studio-fg2);
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.studio[data-style='professional'] .studio-video {
+  overflow: hidden;
+  border: 1px solid var(--studio-line);
+  border-radius: 14px;
+  background: var(--studio-row);
+}
+
+/* Photos: a 3-up grid of squares, r14, gap 8 (ruling P3). */
+.studio[data-style='professional'] .studio-strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.studio[data-style='professional'] .studio-strip li {
+  aspect-ratio: 1;
+  overflow: hidden;
+  border-radius: 14px;
+  background: var(--studio-el2);
+}
+
+.studio[data-style='professional'] .studio-strip img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Services and events: rows on row r14, a 1 px line, no chevron (nothing to open). */
+.studio[data-style='professional'] :is(ul.studio-events, div.studio-list > ul) {
+  display: grid;
+  gap: 8px;
+}
+
+.studio[data-style='professional'] :is(ul.studio-events, div.studio-list) {
+  background: none;
+}
+
+.studio[data-style='professional']
+  :is(ul.studio-events li, div.studio-list li) {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  min-height: 56px;
+  padding: 14px 16px;
+  border: 1px solid var(--studio-line);
+  border-radius: 14px;
+  background: var(--studio-row);
+}
+
+.studio[data-style='professional'] .studio-list__words {
+  display: grid;
+  flex: 1;
+  gap: 2px;
+  min-width: 0;
+}
+
+.studio[data-style='professional'] .studio-list__title {
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 22px;
+}
+
+.studio[data-style='professional'] .studio-list__sub {
+  color: var(--studio-fg2);
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.studio[data-style='professional'] .studio-price {
+  flex: none;
+  font-size: 15px;
+  font-weight: 650;
+  line-height: 20px;
+}
+
+/* An event's date as text in a 48 px column: the day 20/24 700, the month 11/14 600 caps fg2. */
+.studio[data-style='professional'] .studio-date {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  align-items: center;
+  width: 48px;
+  color: var(--studio-fg2);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 14px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.studio[data-style='professional'] .studio-date__day {
+  order: -1;
+  color: var(--studio-fg);
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 24px;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+/* The foot: today's footer, under the card or the blocks. */
+.studio[data-style='professional'] .studio-foot {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: calc(720px + 2 * var(--gutter));
+  margin: auto auto 0;
+  padding: 40px var(--gutter) 0;
+}
+
+.studio[data-style='professional'] .studio-foot .profile-foot {
+  padding-top: 0;
+  color: var(--studio-fg2);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 16px;
+}
+
+.studio[data-style='professional']
+  .studio-foot
+  :is(.profile-foot a, .tm-button--quiet) {
+  color: var(--studio-fg2);
+  font: inherit;
+  text-decoration-color: var(--studio-accText);
+  text-decoration-thickness: 1.5px;
+}
+
+/* The phone's Tip bar (§6.5): solid bg, a 1 px line on top, an acc pill 48 tall reading "Tip ₦…",
+   its edge tipBarEdge (3.25:1 on bg). */
+.studio[data-style='professional'] .tip-bar {
+  border-top: 1px solid var(--studio-line);
+  background: var(--studio-bg);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+.studio[data-style='professional'] .tip-bar__button {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 48px;
+  padding: 0 22px;
+  border: 1px solid var(--studio-tipBarEdge);
+  border-radius: 999px;
+  background: var(--studio-acc);
+  color: var(--studio-accLabel);
+  font: 600 16px/20px var(--studio-ui);
+  font-variant-numeric: tabular-nums lining-nums;
+  letter-spacing: -0.01em;
+  cursor: pointer;
+  transition: transform 180ms var(--ease);
+}
+
+.studio[data-style='professional'] .tip-bar__button:active {
+  transform: scale(0.98);
+}
+
+/* Tablet: the card and the blocks in one centred column of 720, 24 px gutters. */
+@media (min-width: 768px) {
+  .studio[data-style='professional'] {
+    --gutter: 24px;
+  }
+
+  .studio[data-style='professional'] .studio-page > .studio-card {
+    width: auto;
+    max-width: 720px;
+    margin-inline: auto;
+  }
+}
+
+/* Desktop: content 960. The card (960) rises 160 over a 440 cover; inside it two columns, gap 56:
+   the identity and icon row on the left, the rows, the Tip and "Powered by tipme" on the right
+   (400). The blocks follow in one centred column of 640. */
+@media (min-width: 1024px) {
+  .studio[data-style='professional'] {
+    --tall: 440px;
+    --rise: 160px;
+    --avatar: 120px;
+  }
+
+  .studio[data-style='professional'] .studio-page > .studio-card {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 400px;
+    column-gap: 56px;
+    align-items: start;
+    width: calc(100% - 2 * var(--gutter));
+    max-width: 960px;
+    padding: 0 40px 24px;
+    text-align: start;
+  }
+
+  .studio[data-style='professional'] :is(.studio-card__side, .studio-identity) {
+    align-items: flex-start;
+  }
+
+  .studio[data-style='professional'] .studio-card__main {
+    padding-top: 40px;
+  }
+
+  .studio[data-style='professional'] .studio-card__main > .studio-rows {
+    margin-top: 0;
+  }
+
+  .studio[data-style='professional'] .studio-name {
+    margin-top: 18px;
+    font-size: 40px;
+    line-height: 46px;
+    letter-spacing: -0.025em;
+  }
+
+  .studio[data-style='professional'] .studio-name--long {
+    font-size: 32px;
+    line-height: 38px;
+  }
+
+  .studio[data-style='professional'] .studio-bio {
+    font-size: 17px;
+    line-height: 26px;
+  }
+
+  .studio[data-style='professional'] .studio-icons {
+    justify-content: flex-start;
+  }
+
+  .studio[data-style='professional']
+    .studio-card__main
+    > .studio-rows
+    + .studio-tip {
+    margin-top: 24px;
+  }
+
+  .studio[data-style='professional']
+    .studio-card__main
+    > .studio-tip:first-child {
+    margin-top: 0;
+  }
+
+  .studio[data-style='professional'] .studio-grid {
+    max-width: 640px;
+    margin-top: 48px;
+    padding-inline: 0;
+  }
+
+  .studio[data-style='professional'] .studio-title {
+    font-size: 20px;
+    line-height: 26px;
+  }
+
+  .studio[data-style='professional'] .studio-foot {
+    max-width: calc(960px + 2 * var(--gutter));
+  }
+}
+
+/* Reduced motion (§7.2): no scale. */
+@media (prefers-reduced-motion: reduce) {
+  .studio[data-style='professional']
+    :is(
+      .studio-icon:active,
+      .studio-tip .tm-amount-choice input:active + span,
+      .studio-tip .composer-submit:active,
+      .tip-bar__button:active
+    ) {
+    transform: none;
+  }
+}
+
+/* Forced colours drop fills and shadows: the selected chip keeps a mark beyond its weight. */
+@media (forced-colors: active) {
+  .studio[data-style='professional']
+    .studio-tip
+    .tm-amount-choice
+    input:checked
+    + span {
+    outline: 3px solid Highlight;
+    outline-offset: -4px;
+  }
+}
+
+/* The header over the cover (frame.css), over a photo only: the cover runs up under the header,
+   so the card and its words stay where they were. */
+@supports (animation-timeline: view()) and (timeline-scope: none) {
+  .studio[data-style='professional'][data-header]
+    .studio-cover[data-cover='photo'] {
+    box-sizing: content-box;
+    padding-top: var(--nav-height);
+  }
+}

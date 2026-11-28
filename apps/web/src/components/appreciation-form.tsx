@@ -32,6 +32,7 @@ import type { PaymentMode } from '@/lib/payment-mode';
 import { TippingOpensSoon } from './tipping-opens-soon';
 import { Arrow } from './brand';
 import { TipAction } from './tip-action';
+import { PROFESSIONAL_WORDS, skinTipLabel } from './tip-skin-label';
 import { campaignFromPath } from '@/lib/campaign-link';
 import { Money } from '@/components/money';
 
@@ -223,6 +224,10 @@ export function AppreciationForm({
       ? options.parse(custom)
       : (presets.find((preset) => String(preset.minor) === selection)?.minor ??
         null);
+
+  // A skin's fixed Tip words (Creator's two lines, Professional's "Send a … tip"), with the amount
+  // in its name (§6.5).
+  const skinLabel = skin ? skinTipLabel(skin, amount) : null;
 
   const fetchQuote = async (minor: number) => {
     const request = ++latestQuote.current;
@@ -975,6 +980,76 @@ export function AppreciationForm({
           >
             {submitting ? (
               'Starting your tip…'
+            ) : skinLabel?.lines ? (
+              // Creator (addendum §6.5): a heart, the two decided lines, the amount and a chevron.
+              // The button is named by exactly the words it shows, both lines and the amount
+              // (ruling S-R5, WCAG 2.5.3); the glyphs are decoration. The spaces keep the words
+              // apart in the name (a flex container draws none of them).
+              <>
+                <svg
+                  className="tip-skin__heart"
+                  viewBox="0 0 24 24"
+                  width="24"
+                  height="24"
+                  aria-hidden="true"
+                  focusable="false"
+                >
+                  <path d="M12 20.5s-7.5-4.6-9.3-9.4C1.5 7.8 3.6 4.5 7 4.5c2 0 3.6 1.1 5 3 1.4-1.9 3-3 5-3 3.4 0 5.5 3.3 4.3 6.6-1.8 4.8-9.3 9.4-9.3 9.4z" />
+                </svg>
+                <span className="tip-skin__words">
+                  <span className="tip-skin__lines">
+                    <span className="tip-skin__line">{skinLabel.lines[0]}</span>{' '}
+                    <span className="tip-skin__line tip-skin__line--second">
+                      {skinLabel.lines[1]}
+                    </span>
+                  </span>{' '}
+                  {amount ? (
+                    <Money
+                      minor={amount}
+                      code={!onProfile}
+                      className="tip-skin__amount"
+                    />
+                  ) : null}
+                </span>
+                <svg
+                  className="tip-skin__chevron"
+                  viewBox="0 0 24 24"
+                  width="16"
+                  height="16"
+                  aria-hidden="true"
+                  focusable="false"
+                >
+                  <path d="M9.5 6.5L15 12l-5.5 5.5" />
+                </svg>
+              </>
+            ) : skin === 'professional' && skinLabel ? (
+              // Professional (addendum §6.5): "Send a ₦2,000 tip" ("Send a tip" with no valid
+              // amount), then a decorative heart. Named by the words it shows (ruling S-R5).
+              <>
+                <span className="tip-skin__words">
+                  {PROFESSIONAL_WORDS[0]}{' '}
+                  {amount ? (
+                    <>
+                      <Money
+                        minor={amount}
+                        code={!onProfile}
+                        className="tip-skin__amount"
+                      />{' '}
+                    </>
+                  ) : null}
+                  {PROFESSIONAL_WORDS[1]}
+                </span>
+                <svg
+                  className="tip-skin__heart"
+                  viewBox="0 0 24 24"
+                  width="18"
+                  height="18"
+                  aria-hidden="true"
+                  focusable="false"
+                >
+                  <path d="M12 20.5s-7.5-4.6-9.3-9.4C1.5 7.8 3.6 4.5 7 4.5c2 0 3.6 1.1 5 3 1.4-1.9 3-3 5-3 3.4 0 5.5 3.3 4.3 6.6-1.8 4.8-9.3 9.4-9.3 9.4z" />
+                </svg>
+              </>
             ) : amount ? (
               <span>
                 Tip <Money minor={amount} code={!onProfile} />

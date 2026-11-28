@@ -1,15 +1,17 @@
 /**
  * Page Studio styles (spec 2026-11-17-page-studio-styles, §5.1, §7.3, §9).
  *
- * A page picks one of nine finished styles and one of eight tested accents; it never stores a
- * colour. This registry holds only what the API, the design check and the editor must know: each
- * style's neutrals per mode, its defaults, and the accent table. Radii, type sizes, spacing and
- * motion live in each style's CSS. Every value is copied from the spec (which copies the canvas);
- * the exhaustive contrast test proves every style × accent × mode pair.
+ * A page picks one of eleven finished styles (the canvas's nine, then Creator and Professional
+ * from the addendum 2026-11-27-studio-creator-professional-design) and one of eight tested
+ * accents; it never stores a colour. This registry holds only what the API, the design check and
+ * the editor must know: each style's neutrals per mode, its defaults, and the accent table. Radii,
+ * type sizes, spacing and motion live in each style's CSS. Every value is copied from the spec
+ * (which copies the canvas); the exhaustive contrast test proves every style × accent × mode pair.
  */
 
 import {
   blend,
+  contrastRatio,
   hexToOklch,
   oklchToHex,
   type Hex,
@@ -31,6 +33,9 @@ export const STUDIO_STYLE_IDS = [
   'tiles',
   'linen',
   'horizon',
+  // Addendum §5.1: appended, so every existing card position and fixture order stays.
+  'creator',
+  'professional',
 ] as const;
 export type StudioStyleId = (typeof STUDIO_STYLE_IDS)[number];
 
@@ -104,7 +109,10 @@ export const STUDIO_ACCENTS: Record<
   },
 };
 
-/** Classic's default (`accent: null`): today's purple, and the canvas's derived dark (§7.3, §9.1). */
+/**
+ * The default for `accent: null` (Classic, Creator): today's purple, and the canvas's derived dark
+ * (§7.3, §9.1).
+ */
 export const CLASSIC_PURPLE: { name: 'TipMe purple' } & ModePair = {
   name: 'TipMe purple',
   light: { fill: '#7a32f9', label: '#ffffff', text: '#7a32f9' },
@@ -137,13 +145,13 @@ export interface StudioStyle {
   plan: 'free' | 'pro';
   /** null: Inter only. */
   displayFont: StudioFontId | null;
-  /** null: Classic (today's purple). */
+  /** null: TipMe purple (Classic, Creator). */
   defaultAccent: StudioCuratedAccentId | null;
   naturalMode: 'light' | 'dark';
   modes: readonly StudioMode[];
   /** UI order; 'yours' first. Signboard and Sprint offer no gradient. */
   covers: readonly StudioCoverType[];
-  /** Stage, Horizon: a non-photo cover renders the gradient treatment. */
+  /** Stage, Horizon, Creator: a non-photo cover renders the gradient treatment. */
   needsPhoto: boolean;
   /** Where the fixed profile links sit on phone (§8). */
   linksAt: 'after-identity' | 'after-tip' | 'rail';
@@ -480,6 +488,80 @@ export const STUDIO_STYLES: Record<StudioStyleId, StudioStyle> = {
       },
     },
   },
+  // Addendum §7.1 and §5.2. Every surface sits inside the photo-accent envelope (§5.2; the
+  // contracts test asserts it). `control` is the chip border, 3:1 on bg and card.
+  creator: {
+    id: 'creator',
+    name: 'Creator',
+    mood: 'Bold, personal, made to be shared',
+    plan: 'pro',
+    displayFont: null,
+    // null: TipMe purple (§6.1).
+    defaultAccent: null,
+    naturalMode: 'dark',
+    modes: MODES,
+    covers: ALL_COVERS,
+    needsPhoto: true,
+    // The icon row under the bio (§7.4).
+    linksAt: 'after-identity',
+    neutrals: {
+      light: {
+        bg: '#f7f5fc',
+        card: '#ffffff',
+        el2: '#eeeaf6',
+        fg: '#17131f',
+        fg2: '#5f5970',
+        line: '#e2ddec',
+        control: '#8f889e',
+      },
+      dark: {
+        bg: '#0e0b16',
+        card: '#1a1626',
+        el2: '#262033',
+        fg: '#f5f3fa',
+        fg2: '#aba5ba',
+        line: '#2e2840',
+        control: '#6e6780',
+      },
+    },
+  },
+  // Addendum §7.2 and §5.2. `card` is the card rising over the cover; `row` the link rows and
+  // chips inside it (3:1 for `control` on it too).
+  professional: {
+    id: 'professional',
+    name: 'Professional',
+    mood: 'Clean, composed, easy to trust',
+    plan: 'pro',
+    displayFont: null,
+    defaultAccent: 'ink',
+    naturalMode: 'light',
+    modes: MODES,
+    covers: ALL_COVERS,
+    needsPhoto: false,
+    linksAt: 'after-identity',
+    neutrals: {
+      light: {
+        bg: '#f2efea',
+        card: '#faf8f4',
+        el2: '#ece8e1',
+        fg: '#16151a',
+        fg2: '#5e5b63',
+        line: '#e4dfd6',
+        control: '#8a857d',
+        row: '#ffffff',
+      },
+      dark: {
+        bg: '#0f0f11',
+        card: '#18181b',
+        el2: '#2a2a2f',
+        fg: '#f4f4f6',
+        fg2: '#a6a6ae',
+        line: '#2e2e33',
+        control: '#6c6c74',
+        row: '#202024',
+      },
+    },
+  },
 };
 
 export const STUDIO_FREE_STYLES: readonly StudioStyleId[] =
@@ -489,7 +571,8 @@ export const STUDIO_FREE_STYLES: readonly StudioStyleId[] =
 type PhotoAccent = PhotoAccentValues | PhotoAccentFailed;
 
 /**
- * The accent values a page uses. `null` is the style's default (TipMe purple on Classic).
+ * The accent values a page uses. `null` is the style's default (TipMe purple on Classic and
+ * Creator).
  * `'photo'` takes the photo's values, or the curated accent it fell back to (§6 step 5); without
  * a photo accent (none computed yet, or the avatar was removed) it is the default too, so a page
  * always renders with a tested accent.
@@ -556,21 +639,152 @@ export const STUDIO_TILES_RING_MIX = 0.64;
 const tilesRing = (a: StudioAccentValues) =>
   blend(a.label, STUDIO_TILES_RING_MIX, a.fill);
 
+/**
+ * Creator's Tip (addendum §6.1): the accent's light pair in both modes, so the dark page keeps the
+ * saturated button with its light label, already proven at 4.5:1. Except where the light pair is
+ * Ink's (near-black, 1.16:1 on Creator's dark bg): there the dark pair. Compared by value, so a
+ * photo accent stored as failed with Ink as its fallback takes the exception too.
+ */
+export function studioDeep(
+  light: StudioAccentValues,
+  dark: StudioAccentValues,
+  mode: 'light' | 'dark',
+): { fill: Hex; label: Hex } {
+  const pair = mode === 'dark' && isInk(light, 'light') ? dark : light;
+  return { fill: pair.fill, label: pair.label };
+}
+
+/** Whether these are Ink's values in this mode: the one test for the Tip's Ink exception. */
+const isInk = (v: { fill: Hex; label: Hex }, mode: 'light' | 'dark') =>
+  v.fill === STUDIO_ACCENTS.ink[mode].fill &&
+  v.label === STUDIO_ACCENTS.ink[mode].label;
+
+/**
+ * The OKLCH lightness the Tip's vertical sheen drops at its lower end (addendum §6.1: 0 to 0.06,
+ * builder's call). 0.04 is a visible sheen with room under the cap; the board may tune it. Both
+ * ends keep `deepLabel` at 4.5:1, proven in `studioContrastPairs` (Amber and Ink dark, the dark
+ * labels, are the ends it narrows).
+ */
+export const STUDIO_DEEP_SHEEN = 0.04;
+const sheenEnd = (fill: Hex): Hex => {
+  const { l, c, h } = hexToOklch(fill);
+  return oklchToHex({ l: l - STUDIO_DEEP_SHEEN, c, h });
+};
+
+/**
+ * The opacity of the Tip's second line ("Give, tip or appreciate") over `deep`. Ruling P2 of the
+ * Creator plan: full opacity, because 85% measured under 4.5:1 for Green and Coral; its pair is
+ * proven at this value, so any later change is proven too.
+ */
+const SECOND_LINE_OPACITY = 1;
+
+/**
+ * Ruling S-R2 (owner, 28 Nov: every design passes contrast and visibility): the Tip keeps 3:1
+ * against the page at its weakest point (WCAG 1.4.11), which the sheen's darker end can't on its
+ * own. So the button carries a 1 px edge (`deepEdge`): the fill itself wherever the fill reaches
+ * 3:1 on `bg` (an edge in the button's own colour, so the look is unchanged), else the fill's hue
+ * and chroma at the nearest lightness that does, away from the page (lighter in dark, darker in
+ * light). Contrast with the page only grows that way, so a bisection finds it. `min` is the target:
+ * 3 by default, STUDIO_PILL_EDGE_MIN for a pill (its curved ends antialias, ruling S-R4).
+ */
+export function studioTipEdge(
+  fill: Hex,
+  bg: Hex | readonly Hex[],
+  mode: 'light' | 'dark',
+  min: number = 3,
+): Hex {
+  const grounds: readonly Hex[] = typeof bg === 'string' ? [bg] : bg;
+  const ok = (h: Hex) => grounds.every((g) => contrastRatio(h, g) >= min);
+  if (ok(fill)) return fill;
+  const { l, c, h } = hexToOklch(fill);
+  const at = (x: number) => oklchToHex({ l: x, c, h });
+  let near = l; // fails
+  let far = mode === 'dark' ? 1 : 0; // white or black: passes on every Studio page
+  for (let i = 0; i < 20; i += 1) {
+    const mid = (near + far) / 2;
+    if (ok(at(mid))) far = mid;
+    else near = mid;
+  }
+  return at(far);
+}
+
+/**
+ * CSS `brightness(k)` on a colour: each sRGB channel scaled by `k`, clamped. The Tips' hover
+ * (addendum §7.1: 1.06; §7.2: 1.08 light, 0.94 dark) is drawn as these computed fills, never as a
+ * filter on the button, which would lighten its proven 1 px edge too (Task 4 fix round 1).
+ */
+export function studioBrightness(hex: Hex, k: number): Hex {
+  return `#${[1, 3, 5]
+    .map((i) =>
+      Math.min(255, Math.round(parseInt(hex.slice(i, i + 2), 16) * k))
+        .toString(16)
+        .padStart(2, '0'),
+    )
+    .join('')}` as Hex;
+}
+
+/**
+ * A Tip's hover fill: `brightness(k)` of its fill wherever the label keeps 4.5:1 on it, else the
+ * brightness nearest `k` that does (between 1, the proven fill, and `k`). So the hover pair passes
+ * by construction and never narrows a photo accent's choice.
+ */
+export function studioTipHover(fill: Hex, label: Hex, k: number): Hex {
+  const at = (x: number) => studioBrightness(fill, x);
+  if (contrastRatio(label, at(k)) >= 4.5) return at(k);
+  let near = 1; // passes: the fill's own pair is proven
+  let far = k;
+  for (let i = 0; i < 20; i += 1) {
+    const mid = (near + far) / 2;
+    if (contrastRatio(label, at(mid)) >= 4.5) near = mid;
+    else far = mid;
+  }
+  return at(near);
+}
+
+/** Each Tip's hover brightness (addendum §7.1, §7.2). */
+export const STUDIO_TIP_HOVER = {
+  creator: 1.06,
+  professional: { light: 1.08, dark: 0.94 },
+} as const;
+
+/**
+ * The target a pill-shaped Tip's 1 px edge is computed to (rulings S-R2, S-R4): 3:1 plus a margin
+ * for antialiasing on the pill's curved ends, where the boards measured 2.91 drawn on an edge
+ * computed at 3.01. Professional's "Send a tip" pill and its sticky pill (addendum §6.5).
+ */
+export const STUDIO_PILL_EDGE_MIN = 3.25;
+
+/**
+ * The phone's sticky bar (§6.5): `bar` is the page's bg at 85% (`d9`) over whatever scrolls under
+ * it. Its two ends, over pure white and over pure black, bound every bar a visitor can see, so a
+ * pill edge that keeps 3:1 on both keeps it over anything (Creator plan Task 3, ruling S-R2).
+ */
+const BAR_ALPHA = 217 / 255;
+const barEnds = (bg: Hex) =>
+  [blend(bg, BAR_ALPHA, '#ffffff'), blend(bg, BAR_ALPHA, '#000000')] as const;
+
 export interface StudioContrastPair {
   name: string;
   fg: Hex;
   bg: Hex;
-  min: 3 | 4.5;
+  /** 4.5 text, 3 non-text UI (§4.2); 3.25 a pill's edge (STUDIO_PILL_EDGE_MIN). */
+  min: 3 | typeof STUDIO_PILL_EDGE_MIN | 4.5;
 }
 
 /**
  * Every pair a style draws with these accent values in this mode (§4.2): text 4.5, non-text UI 3.
  * The design check and the exhaustive test both run these.
+ *
+ * `tip` is Creator's Tip pair in this mode (`studioDeep`), for a caller that knows both modes'
+ * values (the exhaustive test). Without it, the light pass proves the light pair and the dark pass
+ * proves it only for Ink's values, so a one-mode caller (the photo-accent search) never proves a
+ * pair the page doesn't draw (addendum §6.1).
  */
 export function studioContrastPairs(
   style: StudioStyleId,
   accent: StudioAccentValues,
   mode: 'light' | 'dark',
+  tip?: { fill: Hex; label: Hex },
 ): StudioContrastPair[] {
   const n = STUDIO_STYLES[style].neutrals[mode];
   const { fill: acc, label: accLabel, text: accText } = accent;
@@ -587,8 +801,12 @@ export function studioContrastPairs(
     { name: 'focus ring (accText) on bg', fg: accText, bg: n.bg, min: 3 },
     { name: 'focus ring (accText) on card', fg: accText, bg: n.card, min: 3 },
   ];
-  const add = (name: string, fg: Hex, bg: Hex, min: 3 | 4.5) =>
-    pairs.push({ name, fg, bg, min });
+  const add = (
+    name: string,
+    fg: Hex,
+    bg: Hex,
+    min: StudioContrastPair['min'],
+  ) => pairs.push({ name, fg, bg, min });
   // A style that names a tertiary text colour sets text in it on all three surfaces.
   if (n.fg3)
     for (const bg of [n.bg, n.card, n.el2])
@@ -671,6 +889,103 @@ export function studioContrastPairs(
       chipBorder(n.control as Hex);
       add('selected ring (accText) on bg', accText, n.bg, 3);
       break;
+    case 'creator': {
+      chipBorder(n.control as Hex);
+      // Chips sit on card; the icon row's badges on el2 circles (addendum §7.1).
+      add('chip label (fg) on card', n.fg, n.card, 4.5);
+      add('selected ring (accText) on card', accText, n.card, 3);
+      add('icon badge (fg) on el2', n.fg, n.el2, 4.5);
+      // A row's sub (fg2) on its el2 hover (§7.1).
+      add('fg2 on el2', n.fg2, n.el2, 4.5);
+      // The Tip's pair: the caller's (both modes known), else this mode's values where they are
+      // the pair drawn (the light pass, or Ink's in dark: studioDeep).
+      const deep =
+        tip ??
+        (mode === 'light' || isInk(accent, 'dark')
+          ? { fill: acc, label: accLabel }
+          : null);
+      if (deep) {
+        const second = blend(deep.label, SECOND_LINE_OPACITY, deep.fill);
+        for (const [end, bg] of [
+          ['', deep.fill],
+          [' (sheen end)', sheenEnd(deep.fill)],
+        ] as const) {
+          add(`deepLabel on deep${end}`, deep.label, bg, 4.5);
+          add(`second line on deep${end}`, second, bg, 4.5);
+        }
+        // Hovered, both sheen ends lighten (the edge keeps its colour).
+        for (const [end, bg] of [
+          ['', deep.fill],
+          [' (sheen end)', sheenEnd(deep.fill)],
+        ] as const) {
+          const hover = studioTipHover(
+            bg,
+            deep.label,
+            STUDIO_TIP_HOVER.creator,
+          );
+          add(`deepLabel on deep${end} (hover)`, deep.label, hover, 4.5);
+          add(
+            `second line on deep${end} (hover)`,
+            blend(deep.label, SECOND_LINE_OPACITY, hover),
+            hover,
+            4.5,
+          );
+        }
+        // Ruling S-R2: the button's edge against the page, its weakest point (non-text, 3:1).
+        add(
+          'Tip edge (deepEdge) on bg',
+          studioTipEdge(deep.fill, n.bg, mode),
+          n.bg,
+          3,
+        );
+        // The sticky bar's pill: its edge on the bar's two ends (over white, over black).
+        const barEdge = studioTipEdge(deep.fill, barEnds(n.bg), mode);
+        barEnds(n.bg).forEach((bar, i) =>
+          add(
+            `sticky Tip edge (deepBarEdge) on bar over ${i === 0 ? '#ffffff' : '#000000'}`,
+            barEdge,
+            bar,
+            3,
+          ),
+        );
+      }
+      break;
+    }
+    case 'professional': {
+      const row = n.row as Hex;
+      chipBorder(n.control as Hex);
+      // Link rows and chips sit on `row` inside the card (addendum §7.2).
+      add('fg on row', n.fg, row, 4.5);
+      add('fg2 on row', n.fg2, row, 4.5);
+      add('accText on row', accText, row, 4.5);
+      add('unselected chip border on row', n.control as Hex, row, 3);
+      add('selected border (accText) on row', accText, row, 3);
+      add('icon badge (fg) on el2', n.fg, n.el2, 4.5);
+      // A row's sub (fg2) on its el2 hover (§7.2).
+      add('fg2 on el2', n.fg2, n.el2, 4.5);
+      // Rulings S-R2, S-R4: the "Send a tip" pill (acc) keeps 3.25 against the card at its edge,
+      // and the sticky bar's pill against the bar's solid bg (§6.5).
+      add(
+        'Tip pill edge (tipEdge) on card',
+        studioTipEdge(acc, n.card, mode, STUDIO_PILL_EDGE_MIN),
+        n.card,
+        STUDIO_PILL_EDGE_MIN,
+      );
+      // Hovered, the fill lightens (dark: darkens) and the edge keeps its colour.
+      add(
+        'accLabel on tipHover (Tip hover)',
+        accLabel,
+        studioTipHover(acc, accLabel, STUDIO_TIP_HOVER.professional[mode]),
+        4.5,
+      );
+      add(
+        'sticky Tip pill edge (tipBarEdge) on bg',
+        studioTipEdge(acc, n.bg, mode, STUDIO_PILL_EDGE_MIN),
+        n.bg,
+        STUDIO_PILL_EDGE_MIN,
+      );
+      break;
+    }
   }
   return pairs;
 }
@@ -681,7 +996,11 @@ export type StudioTokenMap = Record<string, string>;
 /**
  * Both modes' tokens for a page: the style's neutrals (extras included), the accent's three
  * values as `acc`, `accLabel` and `accText`, `bar` (bg at 85%), and the derived tokens a style
- * names in §9 (`chipOn` for Journal and Linen, Stage's `glow`, Tiles' `tileFocus`).
+ * names in §9 (`chipOn` for Journal and Linen, Stage's `glow`, Tiles' `tileFocus`), and Creator's
+ * Tip (`deep`, `deepEnd` the sheen's lower end, `deepLabel`, `deepEdge` its 1 px edge, and
+ * `deepBarEdge` the sticky bar pill's edge; addendum §6.1, ruling S-R2; `deepHover` and
+ * `deepEndHover` its hovered sheen), and Professional's pill edges (`tipEdge` on the card,
+ * `tipBarEdge` on the sticky bar's bg; rulings S-R2, S-R4) and hovered fill (`tipHover`).
  */
 export function studioTokens(
   style: StudioStyleId,
@@ -701,6 +1020,41 @@ export function studioTokens(
     if (CHIP_ON_STYLES.includes(style)) t.chipOn = chipOn(a.fill, n.bg, mode);
     if (style === 'tiles') t.tileFocus = STUDIO_TILES_TILE_FOCUS(a);
     if (style === 'stage') t.glow = mode === 'dark' ? a.fill : 'none';
+    if (style === 'creator') {
+      const deep = studioDeep(
+        accentValues(style, accent, 'light', photo),
+        accentValues(style, accent, 'dark', photo),
+        mode,
+      );
+      t.deep = deep.fill;
+      t.deepEnd = sheenEnd(deep.fill);
+      t.deepLabel = deep.label;
+      t.deepEdge = studioTipEdge(deep.fill, n.bg, mode);
+      t.deepBarEdge = studioTipEdge(deep.fill, barEnds(n.bg), mode);
+      // The hover's fills (addendum §7.1: brightness 1.06), drawn in place of a filter so the edge
+      // keeps its colour.
+      t.deepHover = studioTipHover(
+        deep.fill,
+        deep.label,
+        STUDIO_TIP_HOVER.creator,
+      );
+      t.deepEndHover = studioTipHover(
+        sheenEnd(deep.fill),
+        deep.label,
+        STUDIO_TIP_HOVER.creator,
+      );
+    }
+    if (style === 'professional') {
+      t.tipEdge = studioTipEdge(a.fill, n.card, mode, STUDIO_PILL_EDGE_MIN);
+      t.tipBarEdge = studioTipEdge(a.fill, n.bg, mode, STUDIO_PILL_EDGE_MIN);
+      // The hover's fill (§7.2: brightness 1.08, dark 0.94), drawn in place of a filter so the edge
+      // keeps its colour.
+      t.tipHover = studioTipHover(
+        a.fill,
+        a.label,
+        STUDIO_TIP_HOVER.professional[mode],
+      );
+    }
     return t;
   };
   return { light: forMode('light'), dark: forMode('dark') };

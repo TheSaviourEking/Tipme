@@ -188,8 +188,23 @@ const STYLES_WITH_SHEETS = [
   ...styleSheetsSource.matchAll(/import\('\.\/sheets\/([a-z]+)'\)/g),
 ].map((m) => m[1]);
 
+// A stub sheet (Creator plan ruling P1: Creator and Professional until their renderers land) is a
+// style whose own CSS holds no rule yet: there is nothing of its to measure, though it still needs
+// a sheet. Derived from the source, so the day a stub gains a rule it is measured against the
+// 12 KB budget with nothing to take off a list.
+const styleCss = (style) =>
+  readFileSync(
+    new URL(`../src/components/studio-styles/${style}.css`, import.meta.url),
+    'utf8',
+  );
+const STUB_STYLES = STUDIO_STYLE_IDS.filter(
+  (s) => rules(styleCss(s)).length === 0,
+);
+
 // Every style the registry has is drawn (PR 2e drew the last three): each has its own sheet.
-const DRAWN_STYLES = STUDIO_STYLE_IDS.filter((s) => s !== 'classic');
+const DRAWN_STYLES = STUDIO_STYLE_IDS.filter(
+  (s) => s !== 'classic' && !STUB_STYLES.includes(s),
+);
 
 test('every style the registry has has its own sheet', () => {
   for (const style of STUDIO_STYLE_IDS)
