@@ -11,6 +11,7 @@ type Result<T> =
       code: string;
       reason?: string;
       message?: string;
+      costEstimateMinor?: string;
     };
 
 export type Refused = {
@@ -19,6 +20,8 @@ export type Refused = {
   code: string;
   reason?: string;
   message?: string;
+  /** FEE_WAIVER_CONFIRM_REQUIRED: the live monthly cost estimate to confirm. */
+  costEstimateMinor?: string;
 };
 export type OpsAnswer<T> =
   | { kind: 'done'; data: T; actedAlone: boolean }
@@ -31,13 +34,14 @@ export type OpsAnswer<T> =
  */
 export function answerOf<T>(result: Result<T>): OpsAnswer<T> {
   if (!result.ok) {
-    const { status, code, reason, message } = result;
+    const { status, code, reason, message, costEstimateMinor } = result;
     return {
       kind: 'refused',
       status,
       code,
       ...(reason === undefined ? {} : { reason }),
       ...(message === undefined ? {} : { message }),
+      ...(costEstimateMinor === undefined ? {} : { costEstimateMinor }),
     };
   }
   const data = (result.data ?? {}) as {

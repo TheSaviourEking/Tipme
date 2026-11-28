@@ -1,6 +1,12 @@
 'use client';
 import { createContext, useContext } from 'react';
-import { OPS_ISSUE_OUTCOME_WORDS } from '@tipme/contracts';
+import {
+  OPS_ISSUE_OUTCOME_WORDS,
+  type OpsAccountFeeWaivers,
+  type OpsFeeWaivers,
+  type OpsFeeWaiverSetRequest,
+} from '@tipme/contracts';
+import { opsAct, opsFetch } from '@/lib/ops-staff-api';
 
 /** The signed-in staff member's role and permissions (the server checks them on every call). */
 export interface OpsAccess {
@@ -34,6 +40,26 @@ const dateTime = new Intl.DateTimeFormat('en-GB', {
 });
 /** Lagos time, as staff read it. */
 export const when = (iso: string) => dateTime.format(new Date(iso));
+
+/** A staff member as the money screens name them: the end of their id ("staff …a1b2c3"). */
+export const staffWord = (id: string | null) =>
+  id ? `staff …${id.slice(-6)}` : '';
+
+// Who pays the fees (spec 2026-11-23 §6): the four calls. Reads need `fees.manage`; a change is
+// the serious action `fee_waiver.set`, so it may wait for a second person.
+const FEE_WAIVERS = '/v1/ops/fee-waivers';
+export const loadFeeWaivers = () => opsFetch<OpsFeeWaivers>(FEE_WAIVERS);
+export const loadPageFeeWaivers = (profileId: string) =>
+  opsFetch<OpsAccountFeeWaivers>(
+    `${FEE_WAIVERS}/profiles/${encodeURIComponent(profileId)}`,
+  );
+export const loadBusinessFeeWaivers = (businessId: string) =>
+  opsFetch<OpsAccountFeeWaivers>(
+    `${FEE_WAIVERS}/businesses/${encodeURIComponent(businessId)}`,
+  );
+/** Dates go as UTC `Z` strings (`toISOString()`); the API takes no offset. */
+export const setFeeWaiver = (body: OpsFeeWaiverSetRequest) =>
+  opsAct<OpsFeeWaivers>(FEE_WAIVERS, { method: 'POST', body });
 
 /** The provider test link, and where its token waits while staff sign in. */
 export const PROVIDER_TEST_CONFIRM_PATH = '/ops/providers/confirm';
@@ -101,6 +127,8 @@ export const ISSUE_KIND_LABELS: Record<string, string> = {
   collect_own_money_wait: 'Waiting on TipMe’s own money',
   provider_split_short: 'Providers hold less than owed',
   provider_unconnected_money: 'Money at a disconnected provider',
+  fee_waiver_ending: 'A fee waiver ends within a day',
+  fee_waivers_paused: 'Fee waivers paused (low balance)',
   provider_in_debt: 'Provider account in debt',
   reserve_empty: 'Payment reserve empty',
   provider_key_refused: 'Provider refused our key',

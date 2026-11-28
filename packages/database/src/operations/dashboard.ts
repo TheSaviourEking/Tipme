@@ -24,7 +24,7 @@ export function dashboardSummary(
   db: Database,
   profileId: string,
   now: Date,
-): Promise<Omit<DashboardSummary, 'withdrawalsAvailable'>> {
+): Promise<Omit<DashboardSummary, 'withdrawalsAvailable' | 'tipFeeWaiver'>> {
   return guarded(async () => {
     const at = now.toISOString();
     const rows = await db.execute<{
@@ -285,6 +285,7 @@ export function myTipDetail(
       provider_fee: string;
       net: string;
       policy: string;
+      waived: boolean;
       provider: string | null;
       hidden: boolean;
       reported: boolean;
@@ -295,7 +296,7 @@ export function myTipDetail(
              f.hidden_at IS NOT NULL AS hidden, f.reported_at IS NOT NULL AS reported,
              t.gross_minor::text AS gross, q.platform_fee_minor::text AS platform,
              q.provider_fee_minor::text AS provider_fee, q.recipient_net_minor::text AS net,
-             q.fee_policy_version AS policy,
+             q.fee_policy_version AS policy, q.fee_waiver_id IS NOT NULL AS waived,
              (SELECT a.provider FROM payment_attempts a WHERE a.intent_id = t.intent_id
                ORDER BY a.attempt_number DESC LIMIT 1) AS provider
         FROM tips t
@@ -324,6 +325,7 @@ export function myTipDetail(
       providerFeeMinor: row.provider_fee,
       netMinor: row.net,
       feePolicyVersion: row.policy,
+      feeCoveredByTipMe: Boolean(row.waived),
       proof: {
         verified:
           row.state === 'paid' &&

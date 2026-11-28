@@ -22,6 +22,8 @@ export type SessionResult<T> =
       message?: string;
       /** STUDIO_DESIGN_CHECK_FAILED: the server's design check issues. */
       issues?: StudioIssue[];
+      /** FEE_WAIVER_CONFIRM_REQUIRED: the live monthly cost estimate to show and confirm. */
+      costEstimateMinor?: string;
     };
 
 interface ApiFetchInit {
@@ -135,6 +137,7 @@ async function sendWith<T>(
       reason?: string;
       message?: string;
       issues?: StudioIssue[];
+      costEstimateMinor?: string;
     };
   } | null;
   if (response.ok && body && 'data' in body)
@@ -148,6 +151,9 @@ async function sendWith<T>(
     ...(body?.error?.message ? { message: body.error.message } : {}),
     ...(Array.isArray(body?.error?.issues)
       ? { issues: body.error.issues }
+      : {}),
+    ...(typeof body?.error?.costEstimateMinor === 'string'
+      ? { costEstimateMinor: body.error.costEstimateMinor }
       : {}),
   };
 }

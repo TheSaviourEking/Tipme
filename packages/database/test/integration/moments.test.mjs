@@ -12,6 +12,7 @@ import {
   markAttemptInitiated,
   publicProfile,
   recordProviderEvent,
+  rewardStats,
   shareMoment,
 } from '../../dist/index.js';
 import { AT_12_NOV_PLAN_FEES, useDatabase } from './helpers.mjs';
@@ -330,4 +331,65 @@ test('review fixes: rewards', async (t) => {
       assert.equal(quote.breakdown.recipientNetMinor, 200000n);
     },
   );
+});
+
+// Fee waivers, plan Task 6 (spec §6, W12): a tip under a waiver is not a fee TipMe earned, and not
+// a reward TipMe gave, so it moves neither side of the cash-bonus cap.
+test('waived tips count as neither fee income nor reward cost toward the cash-bonus cap', async (t) => {
+  const database = await useDatabase(t, AT_12_NOV_PLAN_FEES);
+  await database.fresh();
+  const { db } = database;
+  const pay = async () => {
+    const quote = await createQuote(db, {
+      handle: 'tobi',
+      tipMinor: 200000n,
+      currency: 'NGN',
+      youCollectOn: false,
+      activeProvider: 'mock',
+    });
+    const intent = await createPaymentIntent(db, {
+      quoteId: quote.quoteId,
+      idempotencyKey: randomUUID(),
+    });
+    const reference = `mock_pay_${randomUUID()}`;
+    await markAttemptInitiated(db, {
+      attemptId: intent.attemptId,
+      provider: 'mock',
+      providerReference: reference,
+    });
+    await recordProviderEvent(db, {
+      provider: 'mock',
+      providerEventId: `evt_${randomUUID()}`,
+      eventType: 'payment.succeeded',
+      attemptId: intent.attemptId,
+      providerReference: reference,
+      amountMinor: quote.breakdown.payerTotalMinor,
+      currency: 'NGN',
+      providerFeeMinor: 3000n,
+      signatureVerified: true,
+      payload: {},
+    });
+    return quote;
+  };
+
+  const normal = await pay();
+  const normalFee = normal.breakdown.platformFeeMinor;
+  assert.ok(normalFee > 0n);
+  const before = await rewardStats(db, TOBI.id);
+  assert.equal(before.lifetimeFeesMinor, normalFee);
+  assert.equal(before.lifetimeRewardCostMinor, 0n);
+
+  // A kind rule now makes TipMe pay the fee of the next tip.
+  await database.pool.query(
+    `INSERT INTO fee_waivers (id, scope, kind, profile_id, business_id, fee, payer, starts_at,
+       ends_at, reason, set_by, approved_by, created_at)
+     VALUES ($1, 'kind', 'individual', NULL, NULL, 'tip', 'tipme', now() - interval '1 day', NULL,
+             'Test rule', NULL, NULL, now() - interval '1 day')`,
+    [randomUUID()],
+  );
+  const waived = await pay();
+  assert.ok(waived.feeWaiverId, 'the second tip was waived');
+  assert.equal(waived.breakdown.platformFeeMinor, 0n);
+
+  assert.deepEqual(await rewardStats(db, TOBI.id), before);
 });

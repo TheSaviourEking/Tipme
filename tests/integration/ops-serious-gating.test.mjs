@@ -566,6 +566,30 @@ const wired = {
         JSON.stringify(await latest()) === JSON.stringify(next),
     };
   },
+  // Fee waivers (spec 2026-11-23 §6): flip who pays the page's withdrawal fee, each time.
+  'fee_waiver.set': async () => {
+    const id = await profileId();
+    const latest = async () => {
+      const [row] = await q(
+        `SELECT payer FROM fee_waivers
+          WHERE scope = 'account' AND profile_id = $1 AND fee = 'withdrawal'
+          ORDER BY starts_at DESC, created_at DESC LIMIT 1`,
+        [id],
+      );
+      return row?.payer ?? null;
+    };
+    const next = (await latest()) === 'tipme' ? 'account' : 'tipme';
+    return {
+      payload: {
+        scope: 'account',
+        kind: 'individual',
+        profileId: id,
+        fee: 'withdrawal',
+        payer: next,
+      },
+      happened: async () => (await latest()) === next,
+    };
+  },
   // The card cost (owner, 26 Nov 2026): one kobo more margin than the cost in force.
   'card_costs.change': async () => {
     const latest = async () => {

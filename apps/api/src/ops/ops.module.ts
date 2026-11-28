@@ -26,6 +26,7 @@ import { OpsProPaymentsController } from './pro-payments.controller.js';
 import { OpsTipRefundsController } from './tip-refunds.controller.js';
 import { OpsProPriceController } from './pro-price.controller.js';
 import { OpsPlanFeesController } from './plan-fees.controller.js';
+import { OpsFeeWaiversController } from './fee-waivers.controller.js';
 import { OpsCardCostsController } from './card-costs.controller.js';
 import { OpsCollectSettingsController } from './collect-settings.controller.js';
 import { OpsCollectController } from './collect.controller.js';
@@ -67,6 +68,7 @@ import { seriousServicesProvider } from './serious-services.js';
     OpsChangelogController,
     OpsProPriceController,
     OpsPlanFeesController,
+    OpsFeeWaiversController,
     OpsCardCostsController,
     OpsCollectSettingsController,
     OpsCollectController,

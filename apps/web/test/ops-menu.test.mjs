@@ -275,7 +275,7 @@ test('Fees sits in Work after Prices, only with fees.manage', () => {
     opsMenuGroups(['pro.price', 'fees.manage'])
       .find((group) => group.label === 'Work')
       ?.links.map((link) => link.label),
-    ['Pages', 'Prices', 'Fees'],
+    ['Pages', 'Prices', 'Fees', 'Fee waivers'],
   );
 });
 
@@ -315,4 +315,23 @@ test('Split accounts sits in Work, for issues.view only', () => {
     .find((group) => group.label === 'Work')
     .links.map((link) => link.label);
   assert.deepEqual(work, ['Issues', 'You collect', 'Split accounts']);
+});
+
+test('Fee waivers sits right after Fees, for fees.manage only', () => {
+  const menu = hrefs(['fees.manage']);
+  assert.equal(
+    menu[menu.indexOf('/ops/plan-fees') + 1],
+    '/ops/plan-fees/waivers',
+  );
+  assert.equal(
+    opsMenu(['fees.manage']).find((l) => l.href === '/ops/plan-fees/waivers')
+      ?.label,
+    'Fee waivers',
+  );
+  assert.ok(!hrefs(['search.view']).includes('/ops/plan-fees/waivers'));
+  // The waivers list is its own entry, not "Fees".
+  assert.equal(
+    opsMenuCurrent(opsMenu(['fees.manage']), '/ops/plan-fees/waivers')?.label,
+    'Fee waivers',
+  );
 });

@@ -105,6 +105,32 @@ test('admin metrics', async (t) => {
   );
 
   await t.test(
+    "waived tips are left out of the week's waived figure",
+    async () => {
+      await database.fresh();
+      await tip();
+      await q(
+        `INSERT INTO fee_waivers (id, scope, kind, profile_id, business_id, fee, payer, starts_at,
+           ends_at, reason, set_by, approved_by, created_at)
+         VALUES ($1, 'kind', 'individual', NULL, NULL, 'tip', 'tipme', now() - interval '1 day', NULL,
+                 'Test rule', NULL, NULL, now() - interval '1 day')`,
+        [randomUUID()],
+      );
+      const waivedTip = await tip();
+      const [row] = await q(
+        `SELECT q.waived_platform_fee_minor::text AS waived, q.fee_waiver_id FROM tips t
+           JOIN payment_intents i ON i.id = t.intent_id JOIN tip_quotes q ON q.id = i.quote_id
+          WHERE t.id = $1`,
+        [waivedTip],
+      );
+      assert.ok(row.fee_waiver_id, 'the tip was waived under a rule');
+      assert.ok(BigInt(row.waived) > 0n);
+      const health = await healthMetrics(database.db, { now: new Date() });
+      assert.equal(health.money.rewardCostMinor.thisWeek, '0');
+    },
+  );
+
+  await t.test(
     'the funnel counts visits, amounts chosen, payments started and tips completed this week',
     async () => {
       await database.fresh();

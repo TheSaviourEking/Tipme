@@ -134,6 +134,8 @@ const SEVERITY: Record<IssueKind, IssueSeverity> = {
   collect_own_money_wait: 'money',
   provider_split_short: 'money',
   provider_unconnected_money: 'money',
+  fee_waiver_ending: 'info',
+  fee_waivers_paused: 'money',
 };
 
 /** Plain words for the inbox. Ids and the public handle only: never names, messages or numbers. */
@@ -254,6 +256,10 @@ function summaryOf(kind: IssueKind, handle: string | null): string {
       return `The daily split check found that the payment providers hold less for ${handle ? page : 'a recipient or a business'} than TipMe's ledger owes them, by more than ₦100. Withdrawals stay capped by the ledger, so nothing is overpaid: find where the difference went (a refund or dispute after a withdrawal, for example) and cover it at that provider.`;
     case 'provider_unconnected_money':
       return 'A payment provider that is no longer connected still holds money owed to recipients or businesses, so they can’t withdraw it. Connect it again as withdraw-only to let it drain, or settle it with the provider. Nothing is sent through another provider.';
+    case 'fee_waiver_ending':
+      return 'A fee waiver ends within a day.';
+    case 'fee_waivers_paused':
+      return "Fee waivers paused: TipMe's balance is low.";
     case 'support_request':
       return `A support request from ${page}. Reveal it to read their words and how to reach them.`;
   }

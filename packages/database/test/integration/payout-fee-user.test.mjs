@@ -13,7 +13,7 @@ import {
   startPayout,
   withdrawalQuote,
 } from '../../dist/index.js';
-import { useDatabase } from './helpers.mjs';
+import { useDatabase, waiveFee } from './helpers.mjs';
 
 // A person pays the partner's ₦50 from the amount on every withdrawal (owner, 25 Nov 2026; before
 // that, 18 Nov, TipMe paid it). Payouts requested while TipMe paid (`fee_payer = 'tipme'`) keep
@@ -349,4 +349,43 @@ test('an unused top-up TipMe already sent pays the next withdrawal’s fee, once
   await startPayout(s.database.db, { payoutId: second.payoutId, provider });
   assert.equal(provider.calls.covers.length, 0);
   assert.equal(provider.calls.payouts.at(-1).amountMinor, 195_000n);
+});
+
+// Fee waivers (spec 2026-11-23 §5): a fee TipMe pays under a waiver is paid as a TipMe-paid fee
+// always was, from the platform reserve top-up, and booked as TipMe's cost. Only the request
+// changes. The two before it pay their fee (profit guards, owner 25 Nov 2026).
+test('a waived withdrawal is sent whole: TipMe tops up the ₦50 and books it as its cost', async (t) => {
+  const s = await setup(t);
+  await s.tip();
+  const provider = partner();
+  await s.withdraw(provider, 200_000n);
+  await s.withdraw(provider, 200_000n);
+  const rule = await waiveFee(s.database, {
+    scope: 'account',
+    kind: 'individual',
+    profileId: TOBI.id,
+  });
+  const { payoutId } = await s.withdraw(provider, 500_000n);
+  const row = await s.payout(payoutId);
+  assert.equal(row.fee_payer, 'tipme');
+  assert.equal(row.user_fee_minor, '0');
+  assert.equal(row.amount_minor, '500000');
+  assert.equal(row.fee_waiver_id, rule);
+  assert.equal(row.waived_fee_minor, '5000');
+  assert.equal(
+    await startPayout(s.database.db, { payoutId, provider }),
+    'started',
+  );
+  assert.equal(provider.calls.covers.length, 1);
+  assert.equal(provider.calls.covers[0].feeMinor, 5000n);
+  assert.equal(provider.calls.payouts[0].amountMinor, 500_000n);
+  await s.paid(payoutId);
+  assert.equal(await s.available(), 50_000n);
+  assert.deepEqual(await s.postings(payoutId), [
+    { code: 'provider_clearing', side: 'credit', amount: '5000' },
+    { code: 'provider_clearing', side: 'credit', amount: '500000' },
+    { code: 'provider_fee_expense', side: 'debit', amount: '5000' },
+    { code: 'recipient_payable', side: 'debit', amount: '500000' },
+  ]);
+  assert.deepEqual(await s.balanced(payoutId), []);
 });

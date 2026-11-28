@@ -39,6 +39,7 @@ import {
   dashboardSummary,
   exportMyTipsCsv,
   exportMyWorkCsv,
+  feeWaiverFor,
   getWeeklyReport,
   listMyTips,
   listMyWithdrawals,
@@ -52,6 +53,7 @@ import {
   reportMessage,
   requestWithdrawal,
   safeError,
+  tipWaiversPausedNow,
   withdrawalInReview,
   withdrawalQuote,
   withdrawalsAvailable,
@@ -59,6 +61,7 @@ import {
   type PayoutProviderSet,
 } from '@tipme/database';
 import { z } from 'zod';
+import { API_CONFIG, type ApiConfig } from '../config.js';
 import { CsrfGuard } from '../auth/csrf.guard.js';
 import {
   CurrentUser,
@@ -93,6 +96,7 @@ export class DashboardController {
     @Inject(LOGGER) private readonly logger: Logger,
     @Inject(PARTNER_QUOTE_CACHE)
     private readonly partnerCache: RedisPartnerQuoteCache,
+    @Inject(API_CONFIG) private readonly config: ApiConfig,
     @Optional()
     @Inject(LIVE_PUBLISHER)
     private readonly publishLive: PublishLive = async () => undefined,
@@ -131,14 +135,37 @@ export class DashboardController {
     @CurrentUser() auth: AuthContext,
   ): Promise<ApiDataResponse<DashboardSummary>> {
     const profileId = await this.profile(auth);
-    const [summary, available] = await Promise.all([
-      dashboardSummary(this.database.db, profileId, new Date()),
+    const now = new Date();
+    const [summary, available, tipFeeWaiver] = await Promise.all([
+      dashboardSummary(this.database.db, profileId, now),
       withdrawalsAvailable(this.database.db, {
         profileId,
         providers: this.providers,
       }),
+      this.tipFeeWaiver(profileId, now),
     ]);
-    return { data: { ...summary, withdrawalsAvailable: available } };
+    return {
+      data: { ...summary, withdrawalsAvailable: available, tipFeeWaiver },
+    };
+  }
+
+  /**
+   * "TipMe is covering the fee on your tips" (spec 2026-11-23 §7, W17): the question a new tip's
+   * quote asks (quotes.ts), so the line shows exactly while a new tip would be waived. Paused
+   * waivers (W6) price new tips normally, so the line hides then.
+   */
+  private async tipFeeWaiver(
+    profileId: string,
+    now: Date,
+  ): Promise<DashboardSummary['tipFeeWaiver']> {
+    const db = this.database.db;
+    const [waiver, paused] = await Promise.all([
+      feeWaiverFor(db, { owner: { profileId }, fee: 'tip', now }),
+      tipWaiversPausedNow(db, this.config.PAYMENT_PROVIDER),
+    ]);
+    if (waiver.payer !== 'tipme' || waiver.ruleId === null || paused)
+      return null;
+    return { endsAt: waiver.endsAt?.toISOString() ?? null };
   }
 
   /** For "your page was opened N times today" while supporters can't tip yet (PR #31). */

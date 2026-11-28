@@ -111,6 +111,8 @@ export const apiErrorCodes = [
   'ANNOUNCEMENT_NO_RECIPIENTS',
   'ANNOUNCEMENT_EMAIL_NOT_SET_UP',
   'PLAN_FEES_CONFIRM_REQUIRED',
+  // Fee waivers (W11): a kind-wide TipMe-pays rule needs its estimated monthly cost confirmed.
+  'FEE_WAIVER_CONFIRM_REQUIRED',
   'PRO_PRICE_NOT_SET',
   'PRO_PRICE_CHANGED',
   'PRO_PURCHASE_OPEN',
@@ -218,6 +220,12 @@ export interface ApiErrorResponse {
     reason?: string;
     /** STUDIO_DESIGN_CHECK_FAILED: the server's design check of the person's own draft. */
     issues?: StudioIssue[];
+    /**
+     * FEE_WAIVER_CONFIRM_REQUIRED from `POST /v1/ops/fee-waivers`: the live estimate of the monthly
+     * cost (minor units, digits), for the screen to show and confirm. `reason` is `confirm_cost`
+     * when no figure was confirmed, `estimate_moved` when the one sent is no longer the live one.
+     */
+    costEstimateMinor?: string;
   };
 }
 

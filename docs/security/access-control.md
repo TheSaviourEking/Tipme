@@ -67,7 +67,7 @@ Serious actions wait for a second qualified person, and run alone with an alert 
 | `collect.view` | GET `/v1/ops/collect/disputes`<br>GET `/v1/ops/collect/disputes/{id}`<br>GET `/v1/ops/collect/held`<br>GET `/v1/ops/collect/reserve`<br>GET `/v1/ops/collect/same-bank`<br>GET `/v1/ops/collect/transfers`<br>GET `/v1/ops/collect/unclaimed` |
 | `email.export` | GET `/v1/ops/email/export.csv`<br>GET `/v1/ops/email/messages`<br>GET `/v1/ops/email/series`<br>GET `/v1/ops/email/summary` |
 | `email.read` | GET `/v1/ops/email/messages`<br>GET `/v1/ops/email/messages/{id}/content`<br>GET `/v1/ops/email/messages/{id}/timeline`<br>GET `/v1/ops/email/series`<br>GET `/v1/ops/email/summary` |
-| `fees.manage` | GET `/v1/ops/card-costs`<br>POST `/v1/ops/card-costs`<br>GET `/v1/ops/collect-settings`<br>POST `/v1/ops/collect-settings`<br>POST `/v1/ops/pages/{profileId}/fee`<br>POST `/v1/ops/pages/{profileId}/fee-free`<br>GET `/v1/ops/pages/{profileId}/pricing`<br>GET `/v1/ops/plan-fees`<br>POST `/v1/ops/plan-fees` |
+| `fees.manage` | GET `/v1/ops/card-costs`<br>POST `/v1/ops/card-costs`<br>GET `/v1/ops/collect-settings`<br>POST `/v1/ops/collect-settings`<br>GET `/v1/ops/fee-waivers`<br>POST `/v1/ops/fee-waivers`<br>GET `/v1/ops/fee-waivers/businesses/{businessId}`<br>GET `/v1/ops/fee-waivers/profiles/{profileId}`<br>POST `/v1/ops/pages/{profileId}/fee`<br>POST `/v1/ops/pages/{profileId}/fee-free`<br>GET `/v1/ops/pages/{profileId}/pricing`<br>GET `/v1/ops/plan-fees`<br>POST `/v1/ops/plan-fees` |
 | `issues.resolve` | POST `/v1/ops/business-notes/{tipId}/review`<br>POST `/v1/ops/issues/{id}/resolve` |
 | `issues.view` | GET `/v1/ops/database-budget`<br>GET `/v1/ops/email/messages`<br>GET `/v1/ops/email/series`<br>GET `/v1/ops/email/summary`<br>GET `/v1/ops/issues`<br>GET `/v1/ops/issues/{id}`<br>POST `/v1/ops/issues/{id}/notes`<br>GET `/v1/ops/providers/mail`<br>POST `/v1/ops/providers/tests/confirm`<br>GET `/v1/ops/split-accounts`<br>POST `/v1/ops/split-accounts/read` |
 | `market.edit` | POST `/v1/ops/market`<br>PATCH `/v1/ops/market/{id}`<br>POST `/v1/ops/market/{id}/archive` |
@@ -409,6 +409,10 @@ Serious actions wait for a second qualified person, and run alone with an alert 
 | GET | `/v1/ops/email/messages/{id}/timeline` | `email.read` | n/a (read) | – | – |
 | GET | `/v1/ops/email/series` | `issues.view,email.read,email.export` | n/a (read) | – | – |
 | GET | `/v1/ops/email/summary` | `issues.view,email.read,email.export` | n/a (read) | – | – |
+| GET | `/v1/ops/fee-waivers` | `fees.manage` | n/a (read) | `ops_read` | – |
+| POST | `/v1/ops/fee-waivers` | `fees.manage` | yes | `ops_request` | – |
+| GET | `/v1/ops/fee-waivers/businesses/{businessId}` | `fees.manage` | n/a (read) | `ops_read` | – |
+| GET | `/v1/ops/fee-waivers/profiles/{profileId}` | `fees.manage` | n/a (read) | `ops_read` | – |
 | GET | `/v1/ops/issues` | `issues.view` | n/a (read) | – | – |
 | GET | `/v1/ops/issues/{id}` | `issues.view` | n/a (read) | – | – |
 | POST | `/v1/ops/issues/{id}/notes` | `issues.view` | yes | – | – |

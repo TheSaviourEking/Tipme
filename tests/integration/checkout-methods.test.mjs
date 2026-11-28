@@ -8,7 +8,10 @@ import {
   setPlanFeeRates,
 } from '../../packages/database/dist/index.js';
 import { openTestDatabase } from '../../packages/database/dist/test-support.js';
-import { ADA } from '../../packages/database/test/integration/helpers.mjs';
+import {
+  ADA,
+  waiveFee,
+} from '../../packages/database/test/integration/helpers.mjs';
 import {
   newUser,
   recordingProviders,
@@ -150,6 +153,26 @@ test('a fee-free tip offers bank transfer only', async () => {
   const { quote, calls } = await tip(bachs, providers, 'ada', 50_000);
   assert.equal(quote.feeFree, true);
   assert.deepEqual(methodsOf(calls), [TRANSFER]);
+});
+
+// Profit guards: "a tip TipMe takes nothing from (fee-free credit, waiver) offers bank transfer
+// only". A tip fee waiver (spec 2026-11-23 §4) prices TipMe's share at 0, so card would cost TipMe
+// money it didn't keep.
+test('a tip under a fee waiver offers bank transfer only', async () => {
+  await waiveFee(database, {
+    scope: 'account',
+    kind: 'individual',
+    profileId: ADA,
+    fee: 'tip',
+  });
+  const providers = recordingProviders();
+  const { bachs } = services(database.db, providers);
+  const { quote, calls } = await tip(bachs, providers, 'ada', 50_000);
+  assert.equal(quote.feeFree, true);
+  assert.deepEqual(methodsOf(calls), [TRANSFER]);
+  // TipMe keeps nothing of a waived tip: the checkout is started with a zero share.
+  const [[, input]] = calls;
+  assert.equal(input.tipmeShareMinor, 0n);
 });
 
 test('a retried start sends the same list', async () => {

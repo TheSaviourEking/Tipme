@@ -25,6 +25,7 @@ import { NGN_PAYOUT_FEE_MINOR } from '@tipme/payments';
 import { RateLimitedException } from '../checkout/rate-limit.guard.js';
 import {
   CodedHttpException,
+  FeeWaiverConfirmException,
   StudioCheckFailedException,
 } from './coded.exception.js';
 import { isRetryablePersistenceError } from '../webhooks/retryable.js';
@@ -144,6 +145,8 @@ const messages: Record<ApiErrorCode, string> = {
     'Announcement email isn’t set up on this server, so nothing can be sent.',
   PLAN_FEES_CONFIRM_REQUIRED:
     'That moves a rate by more than 2 percentage points. Confirm the big change to go ahead.',
+  FEE_WAIVER_CONFIRM_REQUIRED:
+    'TipMe paying this fee for every account has a cost. Confirm the estimated monthly cost to go ahead.',
   PRO_PRICE_NOT_SET: 'The Pro price isn’t set yet.',
   PRO_PRICE_CHANGED:
     'The Pro price has changed. Check the new price and try again.',
@@ -508,6 +511,10 @@ const operationErrors: Partial<
     status: 400,
     code: 'PLAN_FEES_CONFIRM_REQUIRED',
   },
+  FEE_WAIVER_CONFIRM_REQUIRED: {
+    status: 400,
+    code: 'FEE_WAIVER_CONFIRM_REQUIRED',
+  },
   PRO_PRICE_NOT_SET: { status: 404, code: 'PRO_PRICE_NOT_SET' },
   PRO_PRICE_CHANGED: { status: 409, code: 'PRO_PRICE_CHANGED' },
   PRO_PURCHASE_OPEN: { status: 409, code: 'PRO_PURCHASE_OPEN' },
@@ -764,6 +771,8 @@ export class ApiExceptionFilter implements ExceptionFilter {
     // The person's own draft, checked by the server: what the editor lists with its fixes.
     if (exception instanceof StudioCheckFailedException)
       body.error.issues = exception.issues;
+    if (exception instanceof FeeWaiverConfirmException)
+      body.error.costEstimateMinor = exception.costEstimateMinor;
     const limit = withdrawalLimitMessage(exception);
     if (limit) body.error.message = limit;
     const problems = changelogProblemsOf(exception);

@@ -27,7 +27,10 @@ const monthOf = (date: Date) =>
     month: '2-digit',
   }).format(date);
 
-/** Lifetime fees a recipient earned TipMe, what TipMe gave back, and fees since the last cash bonus. */
+/**
+ * Lifetime fees a recipient earned TipMe, what TipMe gave back, and fees since the last cash bonus.
+ * A tip under a fee waiver is neither: it earned no fee and is no reward (it is policy, spec §6).
+ */
 export async function rewardStats(
   tx: Database | Tx,
   profileId: string,
@@ -43,13 +46,14 @@ export async function rewardStats(
     since: string;
   }>(sql`
     WITH paid AS (
-      SELECT q.platform_fee_minor AS fee, q.waived_platform_fee_minor AS waived, t.completed_at
+      SELECT q.platform_fee_minor AS fee, q.waived_platform_fee_minor AS waived,
+             q.fee_waiver_id, t.completed_at
         FROM tips t JOIN payment_intents i ON i.id = t.intent_id JOIN tip_quotes q ON q.id = i.quote_id
        WHERE t.profile_id = ${profileId} AND t.status = 'SUCCEEDED'),
     last_cash AS (
       SELECT MAX(created_at) AS at FROM reward_grants WHERE profile_id = ${profileId} AND cash_minor > 0)
     SELECT COALESCE((SELECT SUM(fee) FROM paid), 0)::text AS fees,
-           COALESCE((SELECT SUM(waived) FROM paid), 0)::text AS waived,
+           COALESCE((SELECT SUM(waived) FROM paid WHERE fee_waiver_id IS NULL), 0)::text AS waived,
            COALESCE((SELECT SUM(cash_minor) FROM reward_grants WHERE profile_id = ${profileId}), 0)::text AS cash,
            COALESCE((SELECT SUM(fee) FROM paid, last_cash
                       WHERE last_cash.at IS NULL OR paid.completed_at > last_cash.at), 0)::text AS since`);

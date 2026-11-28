@@ -54,6 +54,19 @@ import {
 import { hasConfirmedMailTest, switchMailProvider } from './provider-admin.js';
 import { readFeatureSwitch, setFeatureSwitch } from './feature-switches.js';
 import { takeBackAction } from './username-take-backs.js';
+import {
+  checkedFeeWaiverPayload,
+  FEE_WAIVER_SET_ACTION,
+  feeWaiverKeyOf,
+  feeWaiverNeedsCostConfirm,
+  feeWaiverTarget,
+  latestRowOfKey,
+  requireFeeWaiverConfirm,
+  requireFeeWaiverEstimateCurrent,
+  scheduledWaiversEndedBy,
+  setFeeWaiver,
+  type FeeWaiverSetPayload,
+} from './fee-waivers.js';
 import { alreadyReversed, reversalsOf, reverseTip } from './reversals.js';
 import { changelogPublishAction } from './changelog-admin.js';
 import { announcementSendAction } from './announcements.js';
@@ -65,6 +78,7 @@ import {
   returnHeldRefundMoney,
   tipRefundFacts,
 } from './tip-refunds.js';
+import { fromWordsWithYear, untilWordsWithYear } from '@tipme/domain';
 import {
   checkedProPrice,
   currentProPrice,
@@ -185,7 +199,11 @@ function acting<Payload>(
     act(
       tx: Tx,
       payload: Payload,
-      context: SeriousActionCheck & { approverId?: string | null },
+      context: SeriousActionCheck & {
+        approverId?: string | null;
+        /** Set only when running an approved request. */
+        requestId?: string | null;
+      },
     ): Promise<unknown>;
   },
 ): SeriousActionDefinition<Payload> {
@@ -677,6 +695,157 @@ const planFeesChange = acting<{
       freeBps: String(set.freeBps),
       proBps: String(set.proBps),
     }));
+  },
+});
+
+/* Fee waivers (spec 2026-11-23 §6) */
+
+const FEE_WORDS = { tip: 'tip fee', withdrawal: 'withdrawal fee' } as const;
+const KIND_WORDS = {
+  individual: 'all individuals',
+  business: 'all businesses',
+  giving: 'all Giving accounts',
+} as const;
+
+/** Who the rule is for, in the words staff read: "@ada", "The Yellow Chilli", "all businesses". */
+async function feeWaiverWho(tx: Tx, payload: FeeWaiverSetPayload) {
+  if (payload.profileId !== undefined)
+    return `@${await handleOf(tx, payload.profileId)}`;
+  if (payload.businessId !== undefined)
+    return (await opsBusinessName(tx, payload.businessId)).name;
+  return KIND_WORDS[payload.kind];
+}
+
+/**
+ * The approver's words (W11). They are stored when asked and compared on approval, so they read no
+ * clock and no live figure: dates always carry the year, the start is the one requested (it begins
+ * on approval if that is later, W3), and the cost is the estimate the asker confirmed. The "until"
+ * date is the last Lagos day covered (R5).
+ */
+async function describeFeeWaiver(
+  tx: Tx,
+  payload: FeeWaiverSetPayload,
+): Promise<string> {
+  const who = await feeWaiverWho(tx, payload);
+  const fee = FEE_WORDS[payload.fee];
+  const when = [
+    payload.startsAt !== undefined
+      ? ` ${fromWordsWithYear(new Date(payload.startsAt))} (or on approval, if later)`
+      : '',
+    payload.endsAt !== undefined
+      ? ` ${untilWordsWithYear(new Date(payload.endsAt))}`
+      : payload.payer === 'tipme'
+        ? ', with no end date'
+        : '',
+  ].join('');
+  if (payload.payer === 'tipme') {
+    const cost =
+      payload.costEstimateMinor !== undefined &&
+      feeWaiverNeedsCostConfirm(payload)
+        ? ` (about ${nairaOf(BigInt(payload.costEstimateMinor))} a month, last 30 days)`
+        : '';
+    return `TipMe pays the ${fee} for ${who}${when}${cost}`;
+  }
+  const ends =
+    payload.payer === 'inherit'
+      ? `The ${fee} for ${who} follows the rule for ${KIND_WORDS[payload.kind]}${when}`
+      : payload.scope === 'kind'
+        ? `${KIND_WORDS[payload.kind].replace(/^all /, 'All ')} pay the ${fee} as normal${when}`
+        : `${who} pays the ${fee} as normal, whatever the rule for ${KIND_WORDS[payload.kind]}${when}`;
+  return `${ends}${await cancelledWords(tx, payload)}`;
+}
+
+/**
+ * ", and the waiver set to start on 6 Dec 2026 is cancelled": the TipMe-pays rows an ending change
+ * cancels (I4). The one clock read in these words: if such a waiver starts while the request waits,
+ * the words change and the request must be asked again, since what it described has changed.
+ */
+async function cancelledWords(
+  tx: Tx,
+  payload: FeeWaiverSetPayload,
+): Promise<string> {
+  const now = new Date();
+  const asked =
+    payload.startsAt === undefined ? now : new Date(payload.startsAt);
+  const scheduled = await scheduledWaiversEndedBy(
+    tx,
+    payload,
+    asked.getTime() > now.getTime() ? asked : now,
+  );
+  if (scheduled.length === 0) return '';
+  const days = scheduled.map((row) =>
+    fromWordsWithYear(row.startsAt).replace(/^from /, ''),
+  );
+  const list =
+    days.length === 1
+      ? days[0]
+      : `${days.slice(0, -1).join(', ')} and ${days.at(-1)}`;
+  return days.length === 1
+    ? `, and the waiver set to start on ${list} is cancelled`
+    : `, and the waivers set to start on ${list} are cancelled`;
+}
+
+/** The payload if it is well formed, else null: subjects and target run before validation. */
+const feeWaiverPayloadOrNull = (payload: unknown) => {
+  try {
+    return checkedFeeWaiverPayload(payload);
+  } catch {
+    return null;
+  }
+};
+
+/*
+ * Who pays the tip or withdrawal fee, by kind or for one account (spec 2026-11-23 §6): a money
+ * change, so a second person decides, or a lone admin acts alone with the alert. Pinned on the
+ * key's latest row, upcoming included (W10), so any change to the key makes a waiting request
+ * stale. A page's owner, or anyone who runs or ran the business (R12), is its subject.
+ */
+const feeWaiverSet = acting<FeeWaiverSetPayload>({
+  name: FEE_WAIVER_SET_ACTION,
+  permission: 'fees.manage',
+  subjects: async (raw, db) => {
+    const payload = feeWaiverPayloadOrNull(raw);
+    if (payload?.profileId !== undefined)
+      return pageOwner(db, payload.profileId);
+    if (payload?.businessId !== undefined)
+      return payoutOwners(db, { businessId: payload.businessId });
+    return [];
+  },
+  target: (raw) => {
+    const payload = feeWaiverPayloadOrNull(raw);
+    return payload ? feeWaiverTarget(payload) : 'fee_waiver:invalid';
+  },
+  current: async (tx, raw) => {
+    const row = await latestRowOfKey(
+      tx,
+      feeWaiverKeyOf(checkedFeeWaiverPayload(raw)),
+    );
+    return row?.id ?? null;
+  },
+  describe: async (tx, raw) => {
+    const payload = checkedFeeWaiverPayload(raw);
+    // Asked at request time too, so a kind-wide waiver without the confirm never opens a request.
+    requireFeeWaiverConfirm(payload);
+    return describeFeeWaiver(tx, payload);
+  },
+  act: async (tx, raw, context) => {
+    const payload = checkedFeeWaiverPayload(raw);
+    // When asked, or acting alone: the figure confirmed is the live one. On approval the approver
+    // confirms the figure they read, so a tip since then doesn't undo the approval.
+    if (context.requestId == null)
+      await requireFeeWaiverEstimateCurrent(tx, payload, context.now);
+    const set = await setFeeWaiver(tx, {
+      ...payload,
+      staffUserId: context.actorId,
+      approvedBy: context.approverId ?? null,
+      reason: context.reason,
+      now: context.now,
+    });
+    return {
+      id: set.id,
+      startsAt: set.startsAt.toISOString(),
+      endsAt: set.endsAt?.toISOString() ?? null,
+    };
   },
 });
 
@@ -1783,6 +1952,7 @@ export function registerRealSeriousActions(): void {
   registerSeriousAction(collectDisputeEvidence);
   registerSeriousAction(collectSameBankClear);
   registerSeriousAction(tipRefundRecordPaid);
+  registerSeriousAction(feeWaiverSet);
 }
 
 /* Routes whose seriousness depends on what is being done */

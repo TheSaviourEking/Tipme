@@ -74,6 +74,13 @@ const LINKS: {
     needs: ['fees.manage'],
   },
   {
+    // Fee waivers (spec 2026-11-23 §6): every rule in force or upcoming, under Fees.
+    href: '/ops/plan-fees/waivers',
+    label: 'Fee waivers',
+    group: 'Work',
+    needs: ['fees.manage'],
+  },
+  {
     // You collect (plan Task 15, spec §9): held money, transfers, disputes, the reserve, unclaimed
     // and settings, as tabs of one entry.
     href: '/ops/collect',

@@ -52,8 +52,8 @@ test('the first start writes every switch: from the old variable if set, else th
       await rows('SELECT key, enabled, source, reason FROM feature_switches')
     ).map((r) => [r.key, r]),
   );
-  // 12 from #216, train 2's business_pro, business_signup, business_owners, campaign_pages, #221's tip_refunds, business_payout_fee_absorbed (18 Nov 2026), and you_collect (19 Nov 2026, not built).
-  assert.equal(Object.keys(stored).length, 19);
+  // 12 from #216, train 2's business_pro, business_signup, business_owners, campaign_pages, #221's tip_refunds, and you_collect (19 Nov 2026). business_payout_fee_absorbed (18 Nov 2026) was retired for fee waivers (spec 2026-11-23 §5).
+  assert.equal(Object.keys(stored).length, 18);
   assert.equal(stored.pro_billing.enabled, true);
   assert.equal(stored.pro_billing.source, 'env');
   assert.match(stored.pro_billing.reason, /PRO_BILLING_ENABLED/);
@@ -70,7 +70,7 @@ test('the first start writes every switch: from the old variable if set, else th
   const [{ n }] = await rows(
     'SELECT count(*)::int AS n FROM feature_switch_changes',
   );
-  assert.equal(n, 19);
+  assert.equal(n, 18);
 });
 
 test('after the first start the stored value wins; a variable still set is ignored and named', async (t) => {
@@ -91,7 +91,7 @@ test('after the first start the stored value wins; a variable still set is ignor
   const [{ n }] = await rows(
     'SELECT count(*)::int AS n FROM feature_switch_changes',
   );
-  assert.equal(n, 19, 'a later start writes no history');
+  assert.equal(n, 18, 'a later start writes no history');
 });
 
 test('a malformed old variable stops the first start, naming it', async (t) => {
@@ -112,7 +112,7 @@ test('two processes starting at once write each switch once', async (t) => {
   const [{ n }] = await rows(
     'SELECT count(*)::int AS n FROM feature_switch_changes',
   );
-  assert.equal(n, 19);
+  assert.equal(n, 18);
 });
 
 test('reads are cached for under 30 seconds, and a change clears the cache', async (t) => {
@@ -267,7 +267,47 @@ test('setting a switch stores it, keeps history and audits it, and refuses no ch
   assert.equal(billing.history.length, 2);
   assert.equal(billing.history[0].approvedBy, SECOND);
   assert.equal(billing.history[1].source, 'default');
-  assert.equal(overview.length, 19);
+  assert.equal(overview.length, 18);
+});
+
+// Fee waivers (spec 2026-11-23 §5): the business payout fee switch is retired. Its stored row stays
+// (rows are never cleaned up by a release) and nothing reads it; its old variable seeds nothing.
+test('business_payout_fee_absorbed is no longer a switch, and a stored row for it is ignored', async (t) => {
+  const { db, rows } = await fresh(t);
+  await rows(
+    `INSERT INTO feature_switches (key, enabled, source, changed_at, reason)
+     VALUES ('business_payout_fee_absorbed', true, 'staff', now(), 'Stored before the retirement')`,
+  );
+  const result = await seedFeatureSwitches(db, {
+    BUSINESS_PAYOUT_FEE_ABSORBED: 'on',
+  });
+  assert.deepEqual(result.ignored, []);
+  assert.ok(
+    result.written.every((w) => w.key !== 'business_payout_fee_absorbed'),
+  );
+  const overview = await featureSwitchOverview(db);
+  assert.equal(overview.length, 18);
+  assert.ok(overview.every((s) => s.key !== 'business_payout_fee_absorbed'));
+  await assert.rejects(
+    db.transaction((tx) =>
+      setFeatureSwitch(tx, {
+        key: 'business_payout_fee_absorbed',
+        on: false,
+        staffUserId: STAFF,
+        approvedBy: null,
+        reason: 'Turning the retired switch off',
+        now: new Date(),
+      }),
+    ),
+    (error) => error.code === 'INVALID_INPUT',
+  );
+  // Every switch still reads as before: the stored row is not one of them.
+  invalidateFeatureSwitches();
+  assert.equal(await featureOn(db, 'pro_billing'), false);
+  const [row] = await rows(
+    `SELECT enabled FROM feature_switches WHERE key = 'business_payout_fee_absorbed'`,
+  );
+  assert.equal(row.enabled, true);
 });
 
 test('history is append-only', async (t) => {

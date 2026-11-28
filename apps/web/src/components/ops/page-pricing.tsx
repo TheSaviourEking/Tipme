@@ -2,6 +2,7 @@
 import { useEffect, useId, useState, type FormEvent } from 'react';
 import type { OpsCardCosts, OpsPagePricing } from '@tipme/contracts';
 import { Button, Card, InputField, Slip, TextareaField } from '@tipme/ui';
+import { AccountFeeWaivers } from '@/components/ops/account-fee-waivers';
 import { ReasonAction } from '@/components/ops/reason-action';
 import {
   ActionOutcome,
@@ -117,7 +118,8 @@ export function ValueWithReason({
 /**
  * One page's pricing (ADR-0014): TipMe keeps the page's plan rate (the rates in Fees, Free 5% and Pro
  * 3% to start, owner 18 Nov 2026) unless staff set a lower share for this page; a deal at or above the plan rate is capped
- * there. Fee-free tips exist only when staff grant them. Nothing here is automatic.
+ * there. Fee-free tips exist only when staff grant them. Nothing here is automatic. Below it, who
+ * pays this page's tip and withdrawal fees (fee waivers, spec 2026-11-23 §6).
  */
 export function PagePricing({ profileId }: { profileId: string }) {
   const [pricing, setPricing] = useState<OpsPagePricing | null>(null);
@@ -163,91 +165,94 @@ export function PagePricing({ profileId }: { profileId: string }) {
   const capped =
     pricing.customFeeBps !== null && pricing.customFeeBps >= pricing.planFeeBps;
   return (
-    <Card className="settings-section">
-      <h2>Pricing</h2>
-      <p>
-        TipMe fee: <strong>{bpsToPercent(pricing.feeBps)}</strong>
-        {pricing.customFeeBps === null || capped
-          ? ` (${standard}, the plan’s rate)`
-          : ' (set by staff for this page)'}
-        , payment processing included.
-        {capped &&
-          ` A staff-set ${bpsToPercent(pricing.customFeeBps!)} is stored, but no page pays more than its plan’s rate.`}{' '}
-        Fee-free tips left: <strong>{pricing.feeFreeRemaining}</strong>
-      </p>
-      {rateCardLine(pricing.feeBps, cardCost) && (
-        <p data-testid="page-fee-card">
-          {rateCardLine(pricing.feeBps, cardCost)}
+    <>
+      <Card className="settings-section">
+        <h2>Pricing</h2>
+        <p>
+          TipMe fee: <strong>{bpsToPercent(pricing.feeBps)}</strong>
+          {pricing.customFeeBps === null || capped
+            ? ` (${standard}, the plan’s rate)`
+            : ' (set by staff for this page)'}
+          , payment processing included.
+          {capped &&
+            ` A staff-set ${bpsToPercent(pricing.customFeeBps!)} is stored, but no page pays more than its plan’s rate.`}{' '}
+          Fee-free tips left: <strong>{pricing.feeFreeRemaining}</strong>
         </p>
-      )}
-      {pageRateBelowFloor(pricing.customFeeBps) && (
-        <Slip dense tone="waiting" title={BELOW_FLOOR}>
-          This page’s stored {bpsToPercent(pricing.customFeeBps!)} was set
-          before the floor. It stays until it is changed here; a new fee must be{' '}
-          {bpsToPercent(RATE_FLOOR_BPS)} or more (or 0 for fee-free).
-        </Slip>
-      )}
-      <p className="tm-hint">
-        Changes apply to new tips only; a price already shown to a supporter is
-        kept. Nothing here is automatic.
-      </p>
-      {outcome && <ActionOutcome outcome={outcome} />}
-      <div className="ops-actions">
-        <ValueWithReason
-          open="Set this page’s fee…"
-          label="New TipMe fee (%)"
-          hint={`${bpsToPercent(RATE_FLOOR_BPS).replace('%', '')} or more, for example 4 or 2.5 (0 is fee-free). Only a fee below the plan’s rate (${bpsToPercent(pricing.planFeeBps)}) changes anything.`}
-          submit="Set this page’s fee"
-          parse={(raw) => {
-            const bps = percentToBps(raw);
-            return bps === 0 || (bps !== null && bps >= RATE_FLOOR_BPS)
-              ? bps
-              : null;
-          }}
-          invalid={`Write the fee as a percentage of ${bpsToPercent(RATE_FLOOR_BPS).replace('%', '')} or more, or 0 for fee-free.`}
-          onSubmit={(bps, reason) =>
-            act(
-              'fee',
-              { feeBps: bps, reason },
-              `The fee is now ${bpsToPercent(bps)} for new tips.`,
-            )
-          }
-        />
-        {pricing.customFeeBps !== null && (
-          <ReasonAction
-            open="Return to the plan’s rate"
-            field="Why return to the plan’s rate?"
-            submit="Use the plan’s rate"
-            onSubmit={(reason) =>
+        {rateCardLine(pricing.feeBps, cardCost) && (
+          <p data-testid="page-fee-card">
+            {rateCardLine(pricing.feeBps, cardCost)}
+          </p>
+        )}
+        {pageRateBelowFloor(pricing.customFeeBps) && (
+          <Slip dense tone="waiting" title={BELOW_FLOOR}>
+            This page’s stored {bpsToPercent(pricing.customFeeBps!)} was set
+            before the floor. It stays until it is changed here; a new fee must
+            be {bpsToPercent(RATE_FLOOR_BPS)} or more (or 0 for fee-free).
+          </Slip>
+        )}
+        <p className="tm-hint">
+          Changes apply to new tips only; a price already shown to a supporter
+          is kept. Nothing here is automatic.
+        </p>
+        {outcome && <ActionOutcome outcome={outcome} />}
+        <div className="ops-actions">
+          <ValueWithReason
+            open="Set this page’s fee…"
+            label="New TipMe fee (%)"
+            hint={`${bpsToPercent(RATE_FLOOR_BPS).replace('%', '')} or more, for example 4 or 2.5 (0 is fee-free). Only a fee below the plan’s rate (${bpsToPercent(pricing.planFeeBps)}) changes anything.`}
+            submit="Set this page’s fee"
+            parse={(raw) => {
+              const bps = percentToBps(raw);
+              return bps === 0 || (bps !== null && bps >= RATE_FLOOR_BPS)
+                ? bps
+                : null;
+            }}
+            invalid={`Write the fee as a percentage of ${bpsToPercent(RATE_FLOOR_BPS).replace('%', '')} or more, or 0 for fee-free.`}
+            onSubmit={(bps, reason) =>
               act(
                 'fee',
-                { feeBps: null, reason },
-                `The plan’s rate (${standard}) applies to new tips.`,
+                { feeBps: bps, reason },
+                `The fee is now ${bpsToPercent(bps)} for new tips.`,
               )
             }
           />
-        )}
-        <ValueWithReason
-          open="Grant fee-free tips…"
-          label="Fee-free tips to grant"
-          hint="Whole number, 1 to 100. Each paid tip uses one."
-          submit="Grant fee-free tips"
-          parse={(raw) =>
-            /^\d{1,3}$/.test(raw.trim()) &&
-            Number(raw) >= 1 &&
-            Number(raw) <= 100
-              ? Number(raw)
-              : null
-          }
-          onSubmit={(count, reason) =>
-            act(
-              'fee-free',
-              { count, reason },
-              `${count} fee-free ${count === 1 ? 'tip' : 'tips'} granted.`,
-            )
-          }
-        />
-      </div>
-    </Card>
+          {pricing.customFeeBps !== null && (
+            <ReasonAction
+              open="Return to the plan’s rate"
+              field="Why return to the plan’s rate?"
+              submit="Use the plan’s rate"
+              onSubmit={(reason) =>
+                act(
+                  'fee',
+                  { feeBps: null, reason },
+                  `The plan’s rate (${standard}) applies to new tips.`,
+                )
+              }
+            />
+          )}
+          <ValueWithReason
+            open="Grant fee-free tips…"
+            label="Fee-free tips to grant"
+            hint="Whole number, 1 to 100. Each paid tip uses one."
+            submit="Grant fee-free tips"
+            parse={(raw) =>
+              /^\d{1,3}$/.test(raw.trim()) &&
+              Number(raw) >= 1 &&
+              Number(raw) <= 100
+                ? Number(raw)
+                : null
+            }
+            onSubmit={(count, reason) =>
+              act(
+                'fee-free',
+                { count, reason },
+                `${count} fee-free ${count === 1 ? 'tip' : 'tips'} granted.`,
+              )
+            }
+          />
+        </div>
+      </Card>
+      <AccountFeeWaivers owner={{ profileId }} />
+    </>
   );
 }

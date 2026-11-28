@@ -23,6 +23,14 @@ export interface DashboardSummary {
   last7Days: { date: string; netMinor: string }[];
   /** False when part of the balance was collected by a provider TipMe cannot pay out through yet. */
   withdrawalsAvailable: boolean;
+  /**
+   * Fee waivers (spec 2026-11-23 §7, W17): TipMe pays the fee on this page's new tips. Set only
+   * while a TipMe-pays tip rule is in force for the page and tip waivers aren't paused (TipMe's
+   * balance at the partner reads low, W6), so the line never promises what a new tip wouldn't get.
+   * `endsAt` is the instant cover stops (an ISO instant, the start of the Lagos day after the last
+   * day covered), or null with no end date. Null when today's rules apply.
+   */
+  tipFeeWaiver: { endsAt: string | null } | null;
 }
 
 /**
@@ -63,6 +71,12 @@ export interface MyTipDetail {
   providerFeeMinor: string;
   netMinor: string;
   feePolicyVersion: string;
+  /**
+   * Fee waivers (W17): this tip's own quote was priced under a TipMe-pays rule, so TipMe covered its
+   * fee. Read from what the quote recorded, never from today's rules: a waiver ending later
+   * doesn't change it. A fee-free credit is not a waiver, so it is false for one.
+   */
+  feeCoveredByTipMe: boolean;
   proof: {
     verified: boolean;
     provider: string | null;
@@ -188,9 +202,11 @@ export type WithdrawalQuote =
       /**
        * Who pays the partner's fee. 'user' by default, for a person (owner, 25 Nov 2026; it replaces
        * 18 Nov's two free a day) and a business (since 12 Nov 2026): the fee comes off the amount
-       * chosen (withdrawing ₦10,000 receives ₦9,950). 'tipme' only when an unused top-up TipMe already
-       * sent to the account can pay it, or, for a business, while the `business_payout_fee_absorbed`
-       * switch is on. The request sends it back (Ruling R6) so a change since is refused.
+       * chosen (withdrawing ₦10,000 receives ₦9,950). 'tipme' while a withdrawal fee waiver is in
+       * force for the account (spec 2026-11-23 §4: its own rule, else its kind's; a business's old
+       * `business_payout_fee_absorbed` switch is now its kind rule), or when an unused top-up TipMe
+       * already sent to the account can pay it. The request sends it back (Ruling R6) so a change
+       * since is refused.
        */
       feePaidBy: 'user' | 'tipme';
       /**

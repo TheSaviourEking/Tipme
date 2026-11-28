@@ -79,6 +79,8 @@ interface Locked {
     recipientNetMinor: bigint;
     tipMinor: bigint;
     waivedPlatformFeeMinor: bigint;
+    /** Fee waivers (W7): the rule a waived quote was priced under; such a tip uses no credit. */
+    feeWaiverId: string | null;
     /** You collect (R7): fixed on the quote; never the profile's mode now. */
     collectionMode: string;
   };
@@ -115,6 +117,7 @@ async function lock(tx: Tx, attemptId: string): Promise<Locked | null> {
       recipientNetMinor: tipQuotes.recipientNetMinor,
       tipMinor: tipQuotes.tipMinor,
       waivedPlatformFeeMinor: tipQuotes.waivedPlatformFeeMinor,
+      feeWaiverId: tipQuotes.feeWaiverId,
       collectionMode: tipQuotes.collectionMode,
     })
     .from(paymentIntents)
@@ -364,8 +367,8 @@ async function apply(
   await moveAttempt('VERIFIED_SUCCEEDED');
   await moveTip('SUCCEEDED', now);
   // A fee-free tip uses up one credit once it is paid (never below zero; a quoted fee-free tip is
-  // honoured even if the credits ran out meanwhile).
-  if (quote.waivedPlatformFeeMinor > 0n)
+  // honoured even if the credits ran out meanwhile). A waived tip never uses one (W7).
+  if (quote.waivedPlatformFeeMinor > 0n && quote.feeWaiverId === null)
     await tx
       .update(feeFreeCredits)
       .set({ remaining: sql`${feeFreeCredits.remaining} - 1` })
